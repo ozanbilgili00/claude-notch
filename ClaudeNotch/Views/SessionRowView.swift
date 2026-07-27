@@ -6,55 +6,62 @@ import SwiftUI
 struct SessionRowView: View {
     @Bindable var store: SessionStore
     let session: Session
-    @State private var showFullLog = false
-
-    private var isSelected: Bool { store.selectedID == session.id }
+    /// Keyboard highlight (arrow keys), separate from pointer hover.
+    var highlighted: Bool = false
+    @State private var hovering = false
+    @AppStorage("compactMode") private var compactMode = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    withAnimation(Theme.quickSpring) {
-                        store.selectedID = isSelected ? nil : session.id
-                    }
-                }
-            if let perm = session.pendingPermission {
-                PermissionView(store: store, session: session, request: perm)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            } else if let q = session.pendingQuestion {
-                QuestionView(store: store, session: session, question: q)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+            // Compact status line; full permission/question/detail live in the focused view.
+            if session.pendingPermission != nil {
+                needsYouLine(icon: "exclamationmark.triangle.fill", text: "Permission needed", tint: Theme.amber)
+            } else if session.pendingQuestion != nil {
+                needsYouLine(icon: "bubble.left.fill", text: "Question waiting", tint: Theme.amber)
             } else if let completion = session.completion {
-                CompletionView(store: store, session: session, completion: completion)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                needsYouLine(icon: completion.succeeded ? "checkmark.seal.fill" : "exclamationmark.octagon.fill",
+                             text: completion.succeeded ? "Task completed" : "Error",
+                             tint: completion.succeeded ? Theme.green : Theme.red)
             } else {
                 activityLine
-                if isSelected {
-                    SessionDetailView(session: session, showFullLog: $showFullLog)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    if showFullLog {
-                        LogViewer(lines: session.logTail)
-                            .transition(.opacity)
-                    }
-                }
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(Theme.quickSpring) { store.selectedID = session.id }
+        }
+        .onHover { hovering = $0 }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: Theme.rowCorner, style: .continuous)
-                .fill(Theme.surface)
+                .fill(hovering || highlighted ? Theme.surfaceHi : Theme.surface)
                 .overlay(
                     RoundedRectangle(cornerRadius: Theme.rowCorner, style: .continuous)
-                        .strokeBorder(borderTint, lineWidth: session.status == .waiting ? 1 : 0.5)
+                        .strokeBorder(borderTint, lineWidth: borderWidth)
                 )
         )
-        .animation(Theme.quickSpring, value: session.pendingPermission?.id)
-        .animation(Theme.quickSpring, value: session.pendingQuestion?.id)
+        .animation(Theme.quickSpring, value: hovering)
+        .animation(Theme.quickSpring, value: highlighted)
+        .animation(Theme.quickSpring, value: session.status)
     }
 
     private var borderTint: Color {
-        session.status == .waiting ? Theme.amber.opacity(0.5) : Theme.stroke
+        if highlighted { return Theme.blue.opacity(0.8) }
+        return session.status == .waiting ? Theme.amber.opacity(0.5) : Theme.stroke
+    }
+
+    private var borderWidth: CGFloat {
+        highlighted || session.status == .waiting ? 1 : 0.5
+    }
+
+    private func needsYouLine(icon: String, text: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 10)).foregroundStyle(tint)
+            Text(text).font(Theme.caption.weight(.medium)).foregroundStyle(tint)
+            Spacer()
+            Text("tap to open").font(Theme.micro).foregroundStyle(Theme.dim)
+        }
     }
 
     // MARK: Header
@@ -62,22 +69,30 @@ struct SessionRowView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(spacing: 3) {
-                PixelIcon(pattern: PixelIcon.crab, color: session.status.color, pixel: 2)
+                PixelCreature(art: .claude,
+                              tint: session.status.creatureTint,
+                              height: 20,
+                              motion: .forStatus(session.status, activity: session.activity))
                 statusGlyph
             }
             .frame(width: 26)
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(session.projectName).font(Theme.title)
-                    Text("·").foregroundStyle(Theme.dim)
-                    Text(session.task)
-                        .font(Theme.body).foregroundStyle(Theme.text)
-                        .lineLimit(1)
-                }
-                Text("You: \(session.task)")
-                    .font(Theme.caption).foregroundStyle(Theme.textDim)
+                // Claude Code's own session title, not the last prompt.
+                Text(session.displayName)
+                    .font(Theme.title)
                     .lineLimit(1)
+                // Compact mode keeps the title and drops the supporting lines.
+                if !compactMode {
+                    Text(session.locationLine)
+                        .font(Theme.micro).foregroundStyle(Theme.dim)
+                        .lineLimit(1)
+                    if !session.task.isEmpty {
+                        Text("You: \(session.task)")
+                            .font(Theme.caption).foregroundStyle(Theme.textDim)
+                            .lineLimit(1)
+                    }
+                }
             }
 
             Spacer(minLength: 8)

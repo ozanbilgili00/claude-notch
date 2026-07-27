@@ -24,6 +24,8 @@ enum MockData {
         {
             var s = Session.empty(id: "s1", cwd: "/Users/ozan/dev/agent-runtime")
             s.projectName = "agent-runtime"
+            s.title = "Trace duplicate event dispatches"
+            s.tty = "/dev/ttys003"
             s.task = "Trace the agent event pipeline and remove duplicate dispatches"
             s.status = .working
             s.activity = .shell
@@ -51,6 +53,8 @@ enum MockData {
         {
             var s = Session.empty(id: "s2", cwd: "/Users/ozan/dev/desktop-app")
             s.projectName = "desktop-app"
+            s.title = "Polish multi-agent session panel"
+            s.tty = "/dev/ttys004"
             s.task = "Polish the multi-agent session panel for release"
             s.status = .waiting
             s.activity = .waiting
@@ -73,6 +77,8 @@ enum MockData {
         {
             var s = Session.empty(id: "s3", cwd: "/Users/ozan/dev/vibe-island")
             s.projectName = "vibe-island"
+            s.title = "Deterministic terminal routing"
+            s.tty = "/dev/ttys005"
             s.task = "Make terminal routing deterministic across splits"
             s.status = .working
             s.activity = .editing

@@ -37,7 +37,15 @@ final class PassthroughHostingView<Content: View>: NSHostingView<Content> {
     /// menu-bar region instead of being pushed down by the display's top inset.
     override var safeAreaInsets: NSEdgeInsets { NSEdgeInsetsZero }
 
+    /// Only pass-through while the compact pill is showing (so clicks around the
+    /// small pill reach the desktop/menu bar behind it). While expanded, the panel
+    /// is a normal interactive surface — transparency-based pass-through there can
+    /// eat clicks on buttons that sit over even slightly-transparent pixels (glyph
+    /// gaps, spacer padding), so we disable it and use plain AppKit hit-testing.
+    var passthroughEnabled: Bool = true
+
     override func hitTest(_ point: NSPoint) -> NSView? {
+        guard passthroughEnabled else { return super.hitTest(point) }
         let result = super.hitTest(point)
         // If the deepest hit is the hosting view's background itself, pass through.
         if result === self { return nil }

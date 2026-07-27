@@ -7,6 +7,18 @@ enum SessionStatus: String, Codable, CaseIterable {
     case error     // 🔴 something failed
     case idle      // ⚪ session open but nothing in flight
 
+    /// Tint for the creature artwork, or nil to draw it in its own colors. It keeps
+    /// Claude's orange until the session actually needs the user — so using the brand
+    /// artwork doesn't cost us the "something wants you" signal.
+    var creatureTint: Color? {
+        switch self {
+        case .waiting: return Theme.amber
+        case .error:   return Theme.red
+        case .working: return nil
+        case .idle:    return nil
+        }
+    }
+
     /// Priority used to decide which session drives the *closed* notch when several are active.
     /// Higher wins. Waiting (needs you) beats a working session; errors beat everything.
     var priority: Int {

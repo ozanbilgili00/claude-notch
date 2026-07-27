@@ -1,24 +1,28 @@
 import SwiftUI
 
-/// Tiny pixel-art glyphs rendered from bitmaps, echoing the retro "space-invader"
-/// session markers in the reference screenshots. Each glyph is an N-row string array
-/// where "#" is a filled pixel.
+/// Tiny pixel-art glyphs rendered from bitmaps: an N-row string array where `#` is a
+/// filled pixel and `+` an optional lighter tone. The session creatures come from real
+/// artwork in `Assets.xcassets` (see `PixelCreature`); these glyphs are the small
+/// decorative markers — the empty state and the equalizer.
 struct PixelIcon: View {
     let pattern: [String]
     var color: Color
+    /// Tone for `+` pixels. Defaults to a lighter wash of `color`.
+    var highlight: Color?
     var pixel: CGFloat = 2.0
     var spacing: CGFloat = 0.5
 
     var body: some View {
         Canvas { ctx, _ in
+            let light = highlight ?? color.opacity(0.55)
             for (row, line) in pattern.enumerated() {
-                for (col, ch) in line.enumerated() where ch == "#" {
+                for (col, ch) in line.enumerated() where ch == "#" || ch == "+" {
                     let rect = CGRect(
                         x: CGFloat(col) * (pixel + spacing),
                         y: CGFloat(row) * (pixel + spacing),
                         width: pixel, height: pixel
                     )
-                    ctx.fill(Path(rect), with: .color(color))
+                    ctx.fill(Path(rect), with: .color(ch == "#" ? color : light))
                 }
             }
         }

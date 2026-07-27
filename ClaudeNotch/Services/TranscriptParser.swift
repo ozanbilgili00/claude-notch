@@ -6,7 +6,11 @@ struct TranscriptEvent {
     var branch: String?
     var addedTokens: Int = 0
     var logLine: String?
-    var userPrompt: String?   // a real user prompt (not a tool result)
+    var userPrompt: String?       // a real user prompt, trimmed to one line for headers
+    var userPromptFull: String?   // the same prompt with its full text, for the conversation
+    var assistantText: String?    // assistant prose (no tool calls), for the conversation
+    var aiTitle: String?          // Claude Code's own name for the session
+    var lastPrompt: String?       // Claude Code's own "last prompt" marker (already clean)
 }
 
 /// Stateless parser for Claude Code transcript lines. Tolerant of unknown/extra fields
@@ -24,17 +28,33 @@ enum TranscriptParser {
         let type = obj["type"] as? String
         let message = obj["message"] as? [String: Any]
 
+        // Claude Code names the session itself and marks the newest real prompt; both are
+        // cleaner than anything we can infer (the `last-prompt` marker already excludes
+        // local slash-command output).
+        if type == "ai-title" {
+            event.aiTitle = (obj["aiTitle"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return event
+        }
+        if type == "last-prompt" {
+            event.lastPrompt = (obj["lastPrompt"] as? String).flatMap { PromptText.clean($0) }
+            return event
+        }
+
         if type == "assistant", let message {
             event.model = message["model"] as? String
             if let usage = message["usage"] as? [String: Any] {
                 event.addedTokens = tokenCount(usage)
             }
             event.logLine = assistantLog(message)
+            event.assistantText = assistantProse(message)
         } else if type == "user", let message {
             event.logLine = userLog(message)
-            // A plain-string user content is a real prompt (tool results are arrays).
-            if let text = message["content"] as? String, !text.isEmpty {
-                event.userPrompt = firstLine(text)
+            // A plain-string user content is a real prompt (tool results are arrays);
+            // local slash-command output and system tags are not.
+            if let text = message["content"] as? String, !PromptText.isNoise(text) {
+                event.userPrompt = PromptText.clean(text, limit: 120)
+                event.userPromptFull = text.trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
         return event
@@ -68,6 +88,20 @@ enum TranscriptParser {
             }
         }
         return nil
+    }
+
+    /// The assistant's prose for this message: every text block joined, tool calls and
+    /// thinking left out. `assistantLog` above returns a one-line preview instead.
+    private static func assistantProse(_ message: [String: Any]) -> String? {
+        guard let content = message["content"] as? [[String: Any]] else { return nil }
+        let parts = content.compactMap { block -> String? in
+            guard block["type"] as? String == "text",
+                  let t = block["text"] as? String,
+                  !t.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            return t
+        }
+        let joined = parts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return joined.isEmpty ? nil : joined
     }
 
     private static func userLog(_ message: [String: Any]) -> String? {

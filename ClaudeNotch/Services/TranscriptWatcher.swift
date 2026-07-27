@@ -19,6 +19,12 @@ final class TranscriptWatcher: @unchecked Sendable {
     // Accumulated state (serial-queue confined).
     private var runningTokens = 0
     private var logTail: [String] = []
+    /// The conversation, built as lines arrive. Because this watcher already tails the
+    /// file with an offset, the focused view gets its turns for free instead of
+    /// re-reading and re-parsing the transcript on every update.
+    private var turns: [ConversationTurn] = []
+    private var turnCounter = 0
+    private static let maxTurns = 40
 
     init(sessionID: String, path: String, store: SessionStore) {
         self.sessionID = sessionID
@@ -73,6 +79,8 @@ final class TranscriptWatcher: @unchecked Sendable {
         var model: String?
         var branch: String?
         var task: String?
+        var aiTitle: String?
+        var lastPrompt: String?
         var tokensAdded = 0
 
         let newline = UInt8(0x0A)
@@ -83,6 +91,10 @@ final class TranscriptWatcher: @unchecked Sendable {
             if let m = e.model { model = m }
             if let b = e.branch, !b.isEmpty { branch = b }
             if let p = e.userPrompt { task = p }
+            if let t = e.aiTitle, !t.isEmpty { aiTitle = t }
+            if let p = e.lastPrompt { lastPrompt = p }
+            if let p = e.userPromptFull { append(.user, p) }
+            if let t = e.assistantText { append(.assistant, t) }
             tokensAdded += e.addedTokens
             if let log = e.logLine {
                 logTail.append(log)
@@ -93,19 +105,41 @@ final class TranscriptWatcher: @unchecked Sendable {
         runningTokens += tokensAdded
         let tokens = runningTokens
         let tail = logTail
+        let conversation = turns
         let sid = sessionID
 
-        guard model != nil || branch != nil || task != nil || tokensAdded > 0 || !tail.isEmpty else { return }
+        guard model != nil || branch != nil || task != nil || aiTitle != nil
+                || lastPrompt != nil || tokensAdded > 0 || !tail.isEmpty
+                || !conversation.isEmpty else { return }
 
         Task { @MainActor [weak store] in
             store?.update(sid) { s in
                 if let model { s.model = model }
                 if let branch { s.branch = branch }
-                // Only fill an empty task (a live UserPromptSubmit hook wins).
-                if let task, s.task.isEmpty { s.task = task }
+                if let aiTitle { s.title = aiTitle }
+                // Claude Code's own `last-prompt` marker is the most reliable source:
+                // it is already free of local slash-command output. It wins outright.
+                if let lastPrompt {
+                    s.task = lastPrompt
+                } else if let task, s.task.isEmpty {
+                    s.task = task
+                }
                 s.sessionTokens = tokens
                 s.logTail = tail
+                s.conversation = conversation
             }
         }
+    }
+
+    /// Add a turn, merging consecutive assistant chunks (one reply often spans several
+    /// transcript lines) and keeping only the tail of the conversation.
+    private func append(_ role: ConversationTurn.Role, _ text: String) {
+        if role == .assistant, turns.last?.role == .assistant {
+            turns[turns.count - 1].text += "\n" + text
+            return
+        }
+        turnCounter += 1
+        turns.append(ConversationTurn(id: turnCounter, role: role, text: text))
+        if turns.count > Self.maxTurns { turns.removeFirst(turns.count - Self.maxTurns) }
     }
 }

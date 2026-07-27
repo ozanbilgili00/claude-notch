@@ -43,6 +43,11 @@ final class UsageService: @unchecked Sendable {
                 self.store.usage.fiveHourResetsIn = snapshot.fiveHourResets
                 self.store.usage.weeklyPercent = snapshot.sevenDay
                 self.store.usage.weeklyResetsIn = snapshot.sevenDayResets
+                self.store.usage.opusPercent = snapshot.opus
+                self.store.usage.opusResetsIn = snapshot.opusResets
+                self.store.usage.extraCreditsUsed = snapshot.extraUsed
+                self.store.usage.extraCreditsLimit = snapshot.extraLimit
+                self.store.usage.severity = snapshot.severity
                 self.store.usage.isLive = true
             }
         }
@@ -53,6 +58,9 @@ final class UsageService: @unchecked Sendable {
     private struct Parsed {
         var fiveHour: Double, fiveHourResets: String
         var sevenDay: Double, sevenDayResets: String
+        var opus: Double?, opusResets: String?
+        var extraUsed: Double?, extraLimit: Double?
+        var severity: String?
     }
 
     private func fetch(token: String) async -> Parsed? {
@@ -75,8 +83,30 @@ final class UsageService: @unchecked Sendable {
         }
         let five = window("five_hour")
         let seven = window("seven_day")
+
+        // Opus gets its own weekly window on some plans and is absent (null) on others.
+        var opus: (Double, String)?
+        if json["seven_day_opus"] is [String: Any] { opus = window("seven_day_opus") }
+
+        // Extra credits only exist once the user switches them on.
+        var extraUsed: Double?, extraLimit: Double?
+        if let extra = json["extra_usage"] as? [String: Any],
+           (extra["is_enabled"] as? Bool) == true {
+            extraUsed = extra["used_credits"] as? Double
+            extraLimit = extra["monthly_limit"] as? Double
+        }
+
+        // `limits[]` carries the API's own severity per window; take the worst one.
+        let order = ["normal": 0, "warning": 1, "critical": 2, "exceeded": 3]
+        let severity = (json["limits"] as? [[String: Any]])?
+            .compactMap { $0["severity"] as? String }
+            .max { (order[$0] ?? 0) < (order[$1] ?? 0) }
+
         return Parsed(fiveHour: five.0, fiveHourResets: five.1,
-                      sevenDay: seven.0, sevenDayResets: seven.1)
+                      sevenDay: seven.0, sevenDayResets: seven.1,
+                      opus: opus?.0, opusResets: opus?.1,
+                      extraUsed: extraUsed, extraLimit: extraLimit,
+                      severity: severity)
     }
 
     // MARK: Keychain

@@ -5,6 +5,7 @@ struct Session: Identifiable, Equatable {
     let id: String                 // Claude Code session_id
     var projectName: String        // last path component of cwd
     var cwd: String
+    var title: String?             // Claude Code's own session title (transcript `ai-title`)
     var task: String               // the user's latest prompt (the "goal")
     var status: SessionStatus
     var activity: ActivityKind
@@ -24,6 +25,7 @@ struct Session: Identifiable, Equatable {
     var pid: Int32?                // claude CLI process id (from discovery)
     var tty: String?              // controlling terminal, e.g. "/dev/ttys003"
     var logTail: [String]          // recent log lines for preview
+    var conversation: [ConversationTurn] = []   // recent turns, built by TranscriptWatcher
 
     var pendingPermission: PermissionRequest?
     var pendingQuestion: Question?
@@ -31,6 +33,22 @@ struct Session: Identifiable, Equatable {
     var timeline: [TimelineEntry]
 
     var elapsed: TimeInterval { Date().timeIntervalSince(startedAt) }
+
+    /// What the notch calls this session: Claude Code's own title when it has named the
+    /// session, otherwise the working directory's name.
+    var displayName: String {
+        if let title, !title.trimmingCharacters(in: .whitespaces).isEmpty { return title }
+        return projectName
+    }
+
+    /// Compact "~/Desktop/film · ttys004" subtitle for headers.
+    var locationLine: String {
+        let home = NSHomeDirectory()
+        var path = cwd
+        if path.hasPrefix(home) { path = "~" + path.dropFirst(home.count) }
+        guard let tty, let name = tty.split(separator: "/").last else { return path }
+        return "\(path) · \(name)"
+    }
 
     /// Pretty model name for badges ("claude-fable-5" -> "Fable 5").
     var modelDisplay: String { Session.prettyModel(model) }
@@ -51,7 +69,7 @@ struct Session: Identifiable, Equatable {
     static func empty(id: String, cwd: String) -> Session {
         let name = (cwd as NSString).lastPathComponent
         return Session(
-            id: id, projectName: name.isEmpty ? "session" : name, cwd: cwd,
+            id: id, projectName: name.isEmpty ? "session" : name, cwd: cwd, title: nil,
             task: "", status: .idle, activity: .idle, activityDetail: "",
             currentTool: nil, model: "claude-opus-4-8", terminalApp: nil, branch: nil,
             startedAt: Date(), lastActivityAt: Date(),

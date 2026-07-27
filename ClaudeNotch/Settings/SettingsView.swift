@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 
 /// Preferences window. Phase 0 stub with the settings surface the spec calls for;
 /// wiring (hook install/uninstall, hotkeys, permission rules) lands in later phases.
@@ -11,8 +12,10 @@ struct SettingsView: View {
     @AppStorage("interceptPermissions") private var interceptPermissions = true
     @AppStorage("interceptQuestions") private var interceptQuestions = true
 
+    @State private var theme = ThemeSettings.shared
     @State private var hooksInstalled = HookInstaller.isInstalled()
     @State private var hookError: String?
+    @State private var loginError: String?
 
     var body: some View {
         TabView {
@@ -26,10 +29,28 @@ struct SettingsView: View {
         Form {
             Section("Startup") {
                 Toggle("Launch at login", isOn: $autoLaunch)
+                    .onChange(of: autoLaunch) { _, on in setLaunchAtLogin(on) }
+                if let loginError {
+                    Text(loginError).font(.caption).foregroundStyle(.red)
+                }
             }
             Section("Notch") {
                 Toggle("Auto-collapse when idle", isOn: $autoCollapse)
                 Toggle("Compact mode", isOn: $compactMode)
+                Picker("Accent color", selection: Binding(
+                    get: { theme.accent },
+                    set: { theme.accent = $0 }
+                )) {
+                    ForEach(ThemeSettings.Accent.allCases) { accent in
+                        HStack {
+                            Circle().fill(accent.color).frame(width: 10, height: 10)
+                            Text(accent.label)
+                        }
+                        .tag(accent)
+                    }
+                }
+                Text("Applies to accents only — working / waiting / error keep their colors so status stays readable.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Alerts") {
                 Toggle("Notifications", isOn: $notifications)
@@ -56,6 +77,19 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Register the app itself as a login item. Reverts the toggle if macOS refuses,
+    /// so the switch never claims something that isn't true.
+    private func setLaunchAtLogin(_ on: Bool) {
+        do {
+            if on { try SMAppService.mainApp.register() }
+            else { try SMAppService.mainApp.unregister() }
+            loginError = nil
+        } catch {
+            loginError = error.localizedDescription
+            autoLaunch = !on
+        }
     }
 
     private func toggleHooks() {

@@ -12,28 +12,28 @@ struct ClosedStateView: View {
     var body: some View {
         HStack(spacing: 0) {
             leftCluster
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.trailing, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 4)
 
             // Gap that sits under the physical camera notch (matches its real width).
             Color.clear.frame(width: notchWidth)
 
             rightCluster
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 10)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, 4)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 6)
         .foregroundStyle(Theme.text)
     }
 
     private var leftCluster: some View {
         HStack(spacing: 6) {
-            // A pixel marker per active session (max 3 shown), tinted by status.
-            HStack(spacing: 3) {
-                ForEach(store.sessions.prefix(3)) { s in
-                    PixelIcon(pattern: PixelIcon.crab, color: s.status.color, pixel: 1.6)
-                }
-            }
+            // The turtle is the notch's own mascot (sessions get Claude's critter).
+            PixelCreature(art: .turtle,
+                          tint: store.aggregateStatus.creatureTint,
+                          height: 18,
+                          motion: .forStatus(store.aggregateStatus,
+                                             activity: store.focusedSession?.activity ?? .idle))
             if store.aggregateStatus == .working {
                 WorkingBars(color: Theme.green)
             }
@@ -41,6 +41,7 @@ struct ClosedStateView: View {
                 .font(Theme.caption)
                 .foregroundStyle(Theme.textDim)
                 .lineLimit(1)
+                .fixedSize()
         }
     }
 

@@ -23,8 +23,12 @@ struct NotchRootView: View {
         .ignoresSafeArea(.all, edges: .all)
         // React to blocking events by forcing the panel open.
         .onChange(of: store.blockingSession?.id) { _, newValue in
-            if newValue != nil { model.forceOpen() }
-            else { model.unlockAndMaybeCollapse() }
+            if let id = newValue {
+                store.selectedID = id       // focus the session that needs the user
+                model.forceOpen()
+            } else {
+                model.unlockAndMaybeCollapse()
+            }
         }
         .onAppear {
             if store.blockingSession != nil { model.forceOpen() }

@@ -46,12 +46,33 @@ struct UsageDashboardView: View {
                               caption: usage.fiveHourResetsIn, tint: tint(usage.fiveHourPercent))
                 CircularGauge(progress: usage.weeklyPercent, label: "7-day",
                               caption: usage.weeklyResetsIn, tint: tint(usage.weeklyPercent))
+                // Plans without a separate Opus allowance simply don't get this ring.
+                if let opus = usage.opusPercent {
+                    CircularGauge(progress: opus, label: "Opus 7-day",
+                                  caption: usage.opusResetsIn ?? "—", tint: tint(opus))
+                }
+            }
+            if let used = usage.extraCreditsUsed {
+                extraCredits(used: used, limit: usage.extraCreditsLimit)
             }
             if !usage.isLive {
                 Text("Sign in to Claude Code to see live limits")
                     .font(Theme.micro).foregroundStyle(Theme.dim)
             }
         }
+    }
+
+    /// Pay-as-you-go credits, shown only when the account has them enabled.
+    private func extraCredits(used: Double, limit: Double?) -> some View {
+        HStack(spacing: 4) {
+            Text("extra credits").font(Theme.micro).foregroundStyle(Theme.dim)
+            Text(limit.map { "$\(fmt(used)) / $\(fmt($0))" } ?? "$\(fmt(used))")
+                .font(Theme.micro.weight(.semibold)).foregroundStyle(Theme.textDim)
+        }
+    }
+
+    private func fmt(_ v: Double) -> String {
+        v == v.rounded() ? String(Int(v)) : String(format: "%.2f", v)
     }
 
     private func tint(_ pct: Double) -> Color {

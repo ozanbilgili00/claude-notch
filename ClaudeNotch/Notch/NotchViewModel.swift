@@ -48,6 +48,9 @@ final class NotchViewModel {
 
     func collapse(force: Bool = false) {
         if lockedOpen && !force { return }
+        // With auto-collapse off the panel stays put when the pointer leaves; only an
+        // explicit close (Done, ⌥Space, Esc) — which passes `force` — puts it away.
+        if !force && !UserDefaults.standard.autoCollapse { return }
         guard presentation != .closed else { return }
         withAnimation(Theme.expandSpring) { presentation = .closed }
     }

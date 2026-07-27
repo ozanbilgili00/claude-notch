@@ -11,6 +11,7 @@ final class NotchWindowController {
     private let store: SessionStore
     private var sizeObservation: AnyCancellable?
     private var lastPresentation: NotchViewModel.Presentation = .closed
+    private weak var hostView: PassthroughHostingView<NotchRootView>?
 
     init(store: SessionStore) {
         self.store = store
@@ -27,6 +28,8 @@ final class NotchWindowController {
             host.safeAreaRegions = []
         }
         panel.contentView = host
+        hostView = host
+        host.passthroughEnabled = viewModel.presentation == .closed
 
         position(for: viewModel.expandedSize)
         panel.orderFrontRegardless()
@@ -55,6 +58,7 @@ final class NotchWindowController {
     private func handlePresentationChange() {
         guard viewModel.presentation != lastPresentation else { return }
         lastPresentation = viewModel.presentation
+        hostView?.passthroughEnabled = viewModel.presentation == .closed
         let target = viewModel.currentSize
         animateFrame(to: target)
     }

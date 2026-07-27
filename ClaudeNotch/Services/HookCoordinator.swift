@@ -126,7 +126,8 @@ final class HookCoordinator {
         let prompt = (p["prompt"] as? String) ?? (p["user_prompt"] as? String) ?? ""
         turnStart[id] = Date()
         store.update(id) { s in
-            if !prompt.isEmpty { s.task = firstLine(prompt) }
+            // Local slash-command output arrives on this channel too; keep it out.
+            if let clean = PromptText.clean(prompt) { s.task = clean }
             s.status = .working
             s.activity = .planning
             s.currentTool = nil
@@ -188,6 +189,10 @@ final class HookCoordinator {
             s.status = .waiting
             s.activity = .waiting
         }
+        if let s = store.session(id) {
+            NotificationService.notify(.needsAttention, session: s,
+                                       body: "Permission needed — \(request.toolName)")
+        }
 
         // Safety net: if unanswered after 5 minutes, stop blocking and let CC prompt.
         let timeout = Task { @MainActor in
@@ -212,6 +217,9 @@ final class HookCoordinator {
             s.pendingQuestion = question
             s.status = .waiting
             s.activity = .waiting
+        }
+        if let s = store.session(id) {
+            NotificationService.notify(.needsAttention, session: s, body: question.prompt)
         }
 
         let timeout = Task { @MainActor in
@@ -335,6 +343,12 @@ final class HookCoordinator {
             )
         }
 
+        if let s = store.session(id) {
+            NotificationService.notify(failed ? .failed : .completed, session: s,
+                                       body: failed ? "Task ended with an error"
+                                                    : "Task completed")
+        }
+
         // Success cards auto-dismiss after a few seconds; errors stay until dismissed.
         if !failed {
             Task { @MainActor in
@@ -370,12 +384,17 @@ final class HookCoordinator {
                 s.transcriptPath = path
                 s.pid = f.pid
                 s.tty = f.tty
+                s.terminalApp = f.terminalApp
                 s.status = .idle
                 store.upsert(s)
                 startWatcher(for: f.id, path: path)
             } else {
                 // Keep terminal coordinates fresh on already-tracked sessions.
-                store.update(f.id) { $0.pid = f.pid; $0.tty = f.tty }
+                store.update(f.id) {
+                    $0.pid = f.pid
+                    $0.tty = f.tty
+                    if let app = f.terminalApp { $0.terminalApp = app }
+                }
             }
         }
 
@@ -405,8 +424,4 @@ final class HookCoordinator {
         (p["session_id"] as? String) ?? (p["sessionId"] as? String)
     }
 
-    private func firstLine(_ s: String) -> String {
-        s.split(whereSeparator: \.isNewline).first.map(String.init)?
-            .trimmingCharacters(in: .whitespaces) ?? s
-    }
 }
