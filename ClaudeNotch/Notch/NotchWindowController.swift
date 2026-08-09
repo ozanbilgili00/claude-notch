@@ -17,7 +17,7 @@ final class NotchWindowController {
         self.store = store
         let notch = ScreenNotch.primary()
         self.viewModel = NotchViewModel(notch: notch)
-        self.panel = NotchPanel(size: viewModel.expandedSize)
+        self.panel = NotchPanel(size: viewModel.windowFootprint)
 
         let root = NotchRootView(store: store, model: viewModel)
         let host = PassthroughHostingView(rootView: root)
@@ -30,8 +30,9 @@ final class NotchWindowController {
         panel.contentView = host
         hostView = host
         host.passthroughEnabled = viewModel.presentation == .closed
+        host.contentHeight = viewModel.currentSize.height
 
-        position(for: viewModel.expandedSize)
+        position(for: viewModel.windowFootprint)
         panel.orderFrontRegardless()
 
         observePresentation()
@@ -59,6 +60,7 @@ final class NotchWindowController {
         guard viewModel.presentation != lastPresentation else { return }
         lastPresentation = viewModel.presentation
         hostView?.passthroughEnabled = viewModel.presentation == .closed
+        hostView?.contentHeight = viewModel.currentSize.height
         let target = viewModel.currentSize
         animateFrame(to: target)
     }
@@ -66,8 +68,9 @@ final class NotchWindowController {
     /// Keep the window big enough to contain the expanded panel at all times so the
     /// SwiftUI content can animate freely; we still recenter on the notch.
     private func position(for size: CGSize) {
-        // Always reserve the expanded footprint; content is top-anchored & centered.
-        let footprint = viewModel.expandedSize
+        // Always reserve the expanded footprint (plus glow slack); content is
+        // top-anchored & centered.
+        let footprint = viewModel.windowFootprint
         let screen = viewModel.notch.screen.frame
         let x = screen.midX - footprint.width / 2
         let y = screen.maxY - footprint.height

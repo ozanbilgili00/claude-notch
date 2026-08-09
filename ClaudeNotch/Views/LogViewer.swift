@@ -15,7 +15,7 @@ struct LogViewer: View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").font(.system(size: 10)).foregroundStyle(Theme.dim)
-                TextField("Search log", text: $query)
+                TextField(L(.searchLog), text: $query)
                     .textFieldStyle(.plain)
                     .font(Theme.caption)
                     .foregroundStyle(Theme.text)

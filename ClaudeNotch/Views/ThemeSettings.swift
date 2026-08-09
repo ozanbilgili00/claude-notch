@@ -26,7 +26,17 @@ final class ThemeSettings {
             }
         }
 
-        var label: String { rawValue.capitalized }
+        /// Kept apart from `rawValue`: that value is the UserDefaults key below, so
+        /// deriving the label from it would tie the persisted setting to the UI language.
+        @MainActor var displayName: String {
+            switch self {
+            case .green:  return L(.accentGreen)
+            case .blue:   return L(.accentBlue)
+            case .violet: return L(.accentViolet)
+            case .amber:  return L(.accentAmber)
+            case .red:    return L(.accentRed)
+            }
+        }
     }
 
     var accent: Accent {

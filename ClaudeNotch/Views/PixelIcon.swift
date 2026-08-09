@@ -62,31 +62,63 @@ struct PixelIcon: View {
 }
 
 /// An animated equalizer glyph used to signal "working".
+///
+/// The tempo follows what Claude is actually doing, so the bars carry information
+/// instead of just being decoration: a shell command drums, planning idles.
 struct WorkingBars: View {
     var color: Color
-    @State private var phase: CGFloat = 0
-    private let heights: [CGFloat] = [0.4, 1.0, 0.6, 0.9, 0.5]
+    var activity: ActivityKind = .shell
 
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 1.5) {
-            ForEach(0..<heights.count, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 0.5)
-                    .fill(color)
-                    .frame(width: 2, height: 10 * animatedHeight(i))
-            }
-        }
-        .frame(height: 12, alignment: .bottom)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                phase = 1
-            }
+    private static let heights: [CGFloat] = [0.4, 1.0, 0.6, 0.9, 0.5]
+
+    private var period: Double {
+        switch activity {
+        case .running, .shell:      return 0.55
+        case .searching, .reading:  return 0.75
+        case .editing:              return 0.9
+        case .planning:             return 1.7
+        case .waiting, .idle:       return 2.2
         }
     }
 
-    private func animatedHeight(_ i: Int) -> CGFloat {
-        let base = heights[i]
+    private static let barWidth: CGFloat = 2
+    private static let barGap: CGFloat = 1.5
+    private static var totalWidth: CGFloat {
+        CGFloat(heights.count) * barWidth + CGFloat(heights.count - 1) * barGap
+    }
+
+    var body: some View {
+        // Drawn in a Canvas, not as a stack of resizing rectangles. Changing a view's
+        // frame every tick makes SwiftUI re-run layout for the whole row — with one of
+        // these per session that alone cost ~12% CPU. A Canvas only ever draws.
+        //
+        // Driven by a timeline rather than a repeating animation so the frame rate is
+        // ours to cap; 20 fps is plenty for five 2pt bars.
+        if Theme.Motion.loopsAllowed {
+            TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
+                bars(at: context.date.timeIntervalSinceReferenceDate)
+            }
+        } else {
+            bars(at: 0)
+        }
+    }
+
+    private func bars(at time: TimeInterval) -> some View {
+        Canvas { ctx, size in
+            for i in 0..<Self.heights.count {
+                let h = 10 * height(i, at: time)
+                let x = CGFloat(i) * (Self.barWidth + Self.barGap)
+                let rect = CGRect(x: x, y: size.height - h, width: Self.barWidth, height: h)
+                ctx.fill(Path(roundedRect: rect, cornerRadius: 0.5), with: .color(color))
+            }
+        }
+        .frame(width: Self.totalWidth, height: 12)
+    }
+
+    private func height(_ i: Int, at time: TimeInterval) -> CGFloat {
         // Offset each bar so they don't move in unison.
-        let wobble = 0.4 * sin((phase * .pi * 2) + CGFloat(i))
-        return max(0.2, min(1.0, base + wobble * phase))
+        let phase = (time / period) * 2 * .pi + Double(i) * 0.9
+        let wobble = 0.42 * sin(phase)
+        return max(0.18, min(1.0, Self.heights[i] + wobble))
     }
 }

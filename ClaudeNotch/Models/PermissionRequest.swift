@@ -4,7 +4,9 @@ import SwiftUI
 struct PermissionRequest: Identifiable, Equatable {
     let id: String                 // request id (correlates hook <-> answer)
     var toolName: String           // "Edit", "Bash", ...
-    var title: String              // e.g. "Edit" / "Run command"
+    // The heading is stored as a key rather than as text, so it stays correct if the
+    // language changes while the request is on screen. nil means "use the tool name".
+    var titleKey: L10n.Key?
     var reason: String?            // Claude's stated reason, if any
     var risk: RiskLevel
     var command: String?           // for Bash: the command
@@ -21,7 +23,15 @@ struct PermissionRequest: Identifiable, Equatable {
             case .high: return Theme.red
             }
         }
-        var label: String { rawValue.capitalized }
+        /// Separate from `rawValue`, which is model data — deriving the label from it
+        /// would mean the displayed text and the stored value change together.
+        @MainActor var displayName: String {
+            switch self {
+            case .low:    return L(.riskLow)
+            case .medium: return L(.riskMedium)
+            case .high:   return L(.riskHigh)
+            }
+        }
     }
 }
 

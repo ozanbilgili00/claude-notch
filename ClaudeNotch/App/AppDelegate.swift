@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var usageService: UsageService?
     private var notchController: NotchWindowController?
     private var statusItem: NSStatusItem?
+    private var settingsWindow: NSWindow?
     private let hotkeys = HotkeyManager()
     private var discoveryTimer: Timer?
 
@@ -32,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator = coord
         let srv = HookServer(coordinator: coord)
         server = srv
+        srv.onAppControl = { [weak self] control in self?.handleAppControl(control) }
         srv.start()
 
         let usage = UsageService(store: store)
@@ -74,13 +76,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleDiscovery()
     }
 
+    // MARK: App-level control messages
+
+    /// `ping` / `show` / `quit` arrive on the same socket as hook events; anything else
+    /// returns nil so the coordinator can handle it (e.g. `resolve`).
+    private func handleAppControl(_ control: String) -> [String: Any]? {
+        switch control {
+        case "ping":
+            return ["ok": true,
+                    "pid": Int(ProcessInfo.processInfo.processIdentifier),
+                    "path": AppInfo.executablePath,
+                    "version": AppInfo.version]
+        case "show":
+            notchController?.expand()
+            return ["ok": true]
+        case "quit":
+            // Reply first, then leave — the caller is usually an installer waiting to
+            // replace this bundle underneath us.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(150))
+                NSApp.terminate(nil)
+            }
+            return ["ok": true]
+        default:
+            return nil
+        }
+    }
+
     // MARK: Discovery
 
     private func scheduleDiscovery() {
         discoveryTimer?.invalidate()
         discoveryTimer = Timer.scheduledTimer(withTimeInterval: discoveryInterval,
                                               repeats: true) { [weak self] _ in
-            self?.runDiscovery()
+            Task { @MainActor in self?.runDiscovery() }
         }
     }
 
@@ -171,33 +200,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.image = NSImage(systemSymbolName: "circle.hexagongrid.fill",
                                      accessibilityDescription: "Claude Notch")
         item.button?.image?.isTemplate = true
-        item.menu = buildMenu()
+        let menu = NSMenu()
+        // Rebuilt on every open (see menuNeedsUpdate): the session count and hook state
+        // both go stale otherwise, and it's also what picks up a language change.
+        menu.delegate = self
+        item.menu = menu
         statusItem = item
     }
 
-    private func buildMenu() -> NSMenu {
-        let menu = NSMenu()
-        menu.addItem(withTitle: "Open Notch", action: #selector(openNotch), keyEquivalent: "")
+    private func populateMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        menu.addItem(withTitle: L(.openNotch), action: #selector(openNotch), keyEquivalent: "")
             .target = self
         menu.addItem(.separator())
         let status = menu.addItem(withTitle: statusSummary(), action: nil, keyEquivalent: "")
         status.isEnabled = false
         let hookStatus = menu.addItem(
-            withTitle: HookInstaller.isInstalled() ? "Hooks: installed" : "Hooks: not installed",
+            withTitle: HookInstaller.isInstalled() ? L(.hooksInstalledMenu)
+                                                   : L(.hooksNotInstalledMenu),
             action: nil, keyEquivalent: "")
         hookStatus.isEnabled = false
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        menu.addItem(withTitle: L(.settingsMenu), action: #selector(openSettings), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Claude Notch", action: #selector(NSApp.terminate(_:)),
+        menu.addItem(withTitle: L(.quitApp), action: #selector(NSApp.terminate(_:)),
                      keyEquivalent: "q")
-        return menu
     }
 
     private func statusSummary() -> String {
         let n = store.workingCount
-        return n > 0 ? "\(n) session\(n == 1 ? "" : "s") working" : "Idle"
+        return n > 0 ? Lcount(.workingCountOne, .workingCountMany, n) : L(.statusIdle)
     }
 
     @objc private func openNotch() { notchController?.expand() }
@@ -209,11 +242,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notchController?.expand()
     }
 
+    /// The preferences window, owned here rather than left to SwiftUI's `Settings`
+    /// scene. Opening that scene means sending the private `showSettingsWindow:` action
+    /// down the responder chain, and in an accessory app with no key window there is
+    /// nothing to receive it — the menu item simply did nothing.
     @objc private func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
-        if #available(macOS 14, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        if let settingsWindow {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            return
         }
+        let hosting = NSHostingController(rootView: SettingsView().environment(store))
+        let window = NSWindow(contentViewController: hosting)
+        // The app name rather than a translated "Settings": the title is set once, so a
+        // localized one would sit in the old language after a switch in this very window.
+        window.title = "Claude Notch"
+        window.styleMask = [.titled, .closable]
+        // Closing must not deallocate it, or reopening lands on a freed window.
+        window.isReleasedWhenClosed = false
+        window.center()
+        settingsWindow = window
+        window.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -241,5 +290,14 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound])
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    /// The status-item menu is built fresh each time it opens. It used to be built once
+    /// at launch, so the "N sessions working" line showed whatever was true then — and it
+    /// would have kept the launch language after a switch in Settings.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        populateMenu(menu)
     }
 }

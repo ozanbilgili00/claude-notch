@@ -39,20 +39,54 @@ final class NotchViewModel {
         presentation == .closed ? closedSize : expandedSize
     }
 
+    /// Slack below the body for the status glow to spill into. The window has to be
+    /// taller than the panel or the glow is simply clipped away at the window edge;
+    /// the extra strip is transparent and passes clicks through (see NotchPanel).
+    static let bloomMargin: CGFloat = 70
+
+    /// Footprint the window always occupies, whatever the presentation.
+    var windowFootprint: CGSize {
+        CGSize(width: expandedSize.width, height: expandedSize.height + Self.bloomMargin)
+    }
+
     // MARK: Transitions
 
     func expand() {
+        hoverTask?.cancel()
         guard presentation != .expanded else { return }
-        withAnimation(Theme.expandSpring) { presentation = .expanded }
+        withAnimation(Theme.Motion.open) { presentation = .expanded }
     }
 
     func collapse(force: Bool = false) {
+        hoverTask?.cancel()
         if lockedOpen && !force { return }
         // With auto-collapse off the panel stays put when the pointer leaves; only an
         // explicit close (Done, ⌥Space, Esc) — which passes `force` — puts it away.
         if !force && !UserDefaults.standard.autoCollapse { return }
         guard presentation != .closed else { return }
-        withAnimation(Theme.expandSpring) { presentation = .closed }
+        withAnimation(Theme.Motion.close) { presentation = .closed }
+    }
+
+    // MARK: Hover intent
+
+    private var hoverTask: Task<Void, Never>?
+    /// Opening needs a moment of intent so the panel doesn't fly open every time the
+    /// pointer crosses the notch on its way to the menu bar. Leaving gets a longer
+    /// grace period so a pointer that slips a few pixels off the edge doesn't
+    /// slam the panel shut mid-click.
+    private static let openDelay: Duration = .milliseconds(120)
+    private static let closeDelay: Duration = .milliseconds(250)
+
+    func hoverIntent(_ hovering: Bool) {
+        hoverTask?.cancel()
+        // Once the panel is open, hovering back into it should never re-trigger a delay.
+        if hovering && presentation == .expanded { return }
+        let delay = hovering ? Self.openDelay : Self.closeDelay
+        hoverTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            if hovering { self.expand() } else { self.collapse() }
+        }
     }
 
     func toggle() {

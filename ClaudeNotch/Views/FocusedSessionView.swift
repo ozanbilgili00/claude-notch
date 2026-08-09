@@ -53,15 +53,20 @@ struct FocusedSessionView: View {
                 .frame(width: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.displayName).font(Theme.title).lineLimit(1)
-                Text(session.locationLine)
-                    .font(Theme.micro).foregroundStyle(Theme.dim).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(session.locationLine)
+                        .font(Theme.micro).foregroundStyle(Theme.dim).lineLimit(1)
+                    // System-driven, so it keeps counting without anything redrawing.
+                    Text(session.startedAt, style: .timer)
+                        .font(Theme.micro).foregroundStyle(Theme.dim).monospacedDigit()
+                }
             }
             Spacer(minLength: 8)
             HStack(spacing: 4) {
                 Badge(text: "Claude", tint: Color.forToken("claude"))
                 Badge(text: session.modelDisplay, tint: Theme.textDim)
             }
-            Button("Done", action: onDone)
+            Button(L(.done), action: onDone)
                 .buttonStyle(.plain)
                 .font(Theme.caption.weight(.medium))
                 .foregroundStyle(Theme.textDim)
@@ -90,14 +95,14 @@ struct FocusedSessionView: View {
 
     private var tabBar: some View {
         HStack(spacing: 6) {
-            tabButton("Conversation", .conversation)
-            tabButton("Log", .log)
+            tabButton(L(.tabConversation), .conversation)
+            tabButton(L(.tabLog), .log)
             Spacer()
         }
     }
 
     private func tabButton(_ title: String, _ value: Tab) -> some View {
-        Button { withAnimation(Theme.quickSpring) { tab = value } } label: {
+        Button { withAnimation(Theme.Motion.quick) { tab = value } } label: {
             Text(title)
                 .font(Theme.caption.weight(.medium))
                 .foregroundStyle(tab == value ? Theme.text : Theme.dim)
@@ -120,7 +125,7 @@ struct FocusedSessionView: View {
             VStack(spacing: 0) {
                 Divider().overlay(Theme.stroke)
                 HStack(alignment: .top, spacing: 6) {
-                    Text("You:")
+                    Text(L(.youPrefix))
                         .font(Theme.caption.weight(.semibold)).foregroundStyle(Theme.accent)
                     Text(text)
                         .font(Theme.caption).foregroundStyle(Theme.text)
@@ -133,7 +138,7 @@ struct FocusedSessionView: View {
                 .padding(.vertical, 6)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    withAnimation(Theme.quickSpring) { promptExpanded.toggle() }
+                    withAnimation(Theme.Motion.quick) { promptExpanded.toggle() }
                 }
                 Divider().overlay(Theme.stroke)
             }
@@ -153,7 +158,7 @@ struct FocusedSessionView: View {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.accent)
-                TextField("Send a prompt to this session…", text: $promptText)
+                TextField(L(.promptPlaceholder), text: $promptText)
                     .textFieldStyle(.plain).font(Theme.caption).foregroundStyle(Theme.text)
                     .onSubmit(sendPrompt)
                 Button(action: sendPrompt) {
@@ -176,7 +181,7 @@ struct FocusedSessionView: View {
 
     private var bottomBar: some View {
         Button(action: onBack) {
-            Text("Show all \(store.sessions.count) sessions")
+            Text(Lcount(.showAllSessionsOne, .showAllSessionsMany, store.sessions.count))
                 .font(Theme.caption)
                 .foregroundStyle(Theme.textDim)
                 .frame(maxWidth: .infinity)
@@ -202,10 +207,10 @@ struct FocusedSessionView: View {
                 case .focusedAndCopied(let app):
                     // Only Terminal.app and iTerm2 accept scripted input; say which one
                     // can't rather than blaming "the terminal" in general.
-                    let name = app ?? "This terminal"
-                    sendHint = "\(name) doesn't support scripted input — prompt copied, paste it in."
+                    let name = app ?? L(.thisTerminal)
+                    sendHint = L(.terminalNoScriptedInput, name)
                 case .failed:
-                    sendHint = "Couldn't reach the terminal."
+                    sendHint = L(.terminalUnreachable)
                 }
             }
         }
@@ -225,7 +230,7 @@ struct ConversationView: View {
                         turnView(turn).id(turn.id)
                     }
                     if turns.isEmpty {
-                        Text("No conversation yet")
+                        Text(L(.noConversation))
                             .font(Theme.caption).foregroundStyle(Theme.dim)
                             .frame(maxWidth: .infinity).padding(.vertical, 30)
                     }
@@ -245,7 +250,7 @@ struct ConversationView: View {
     private func turnView(_ turn: ConversationTurn) -> some View {
         if turn.role == .user {
             HStack(alignment: .top, spacing: 6) {
-                Text("You:").font(Theme.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+                Text(L(.youPrefix)).font(Theme.caption.weight(.semibold)).foregroundStyle(Theme.accent)
                 Text(turn.text).font(Theme.caption).foregroundStyle(Theme.text)
                     .fixedSize(horizontal: false, vertical: true)
             }

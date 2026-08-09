@@ -18,6 +18,8 @@ SOURCES=(
   ClaudeNotch/Services/PermissionRules.swift
   ClaudeNotch/Models/PermissionRequest.swift
   ClaudeNotch/Views/Theme.swift
+  ClaudeNotch/Localization/Localization.swift
+  ClaudeNotch/Localization/Strings.swift
 )
 
 BUILD_DIR=$(mktemp -d)

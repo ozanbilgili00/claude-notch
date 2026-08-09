@@ -38,13 +38,4 @@ enum SessionStatus: String, Codable, CaseIterable {
         case .idle:    return Theme.dim
         }
     }
-
-    var label: String {
-        switch self {
-        case .working: return "Working"
-        case .waiting: return "Waiting"
-        case .error:   return "Error"
-        case .idle:    return "Idle"
-        }
-    }
 }

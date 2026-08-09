@@ -31,7 +31,7 @@ struct CompletionView: View {
                 .foregroundStyle(completion.succeeded ? Theme.green : Theme.red)
                 .font(.system(size: 12))
                 .symbolEffect(.bounce, value: completion.succeeded)
-            Text(completion.succeeded ? "Task Completed" : "Error")
+            Text(completion.succeeded ? L(.taskCompleted) : L(.errorTitle))
                 .font(Theme.title)
             Spacer()
             Text(durationText).font(Theme.micro).foregroundStyle(Theme.dim)
@@ -48,25 +48,21 @@ struct CompletionView: View {
                 Text("+\(completion.filesAdded)").font(Theme.micro).foregroundStyle(Theme.green)
                 Text("-\(completion.filesRemoved)").font(Theme.micro).foregroundStyle(Theme.red)
             }
-            if let tests = completion.testsStatus {
-                Badge(text: tests, tint: tests.contains("pass") ? Theme.green : Theme.red)
+            if let passed = completion.testsPassed {
+                Badge(text: passed ? L(.testsPassing) : L(.testsFailing),
+                      tint: passed ? Theme.green : Theme.red)
             }
         }
     }
 
     private var buttons: some View {
         HStack(spacing: 8) {
-            if completion.succeeded {
-                NotchButton(title: "Open Terminal", tint: Theme.text) {
-                    SessionActions.openTerminal(cwd: session.cwd)
-                }
-            } else {
-                NotchButton(title: "Open Terminal", tint: Theme.text) {
-                    SessionActions.openTerminal(cwd: session.cwd)
-                }
+            // Success and failure offered the same button through two identical branches.
+            NotchButton(title: L(.openTerminal), tint: Theme.text) {
+                SessionActions.openTerminal(cwd: session.cwd)
             }
-            NotchButton(title: "Dismiss", tint: Theme.textDim) {
-                withAnimation(Theme.quickSpring) {
+            NotchButton(title: L(.dismiss), tint: Theme.textDim) {
+                withAnimation(Theme.Motion.quick) {
                     store.update(session.id) { $0.completion = nil }
                 }
             }
@@ -76,6 +72,6 @@ struct CompletionView: View {
     private var durationText: String {
         let t = Int(completion.duration)
         let m = t / 60, s = t % 60
-        return m > 0 ? "\(m)m \(s)s" : "\(s)s"
+        return m > 0 ? "\(m)\(L(.unitMinute)) \(s)\(L(.unitSecond))" : "\(s)\(L(.unitSecond))"
     }
 }

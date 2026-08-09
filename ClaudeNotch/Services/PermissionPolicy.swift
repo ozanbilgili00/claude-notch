@@ -38,7 +38,7 @@ enum PermissionPolicy {
         return PermissionRequest(
             id: requestID,
             toolName: tool,
-            title: title(for: tool),
+            titleKey: titleKey(for: tool),
             reason: input["description"] as? String,
             risk: risk(tool: tool, command: command),
             command: command,
@@ -47,14 +47,16 @@ enum PermissionPolicy {
         )
     }
 
-    private static func title(for tool: String) -> String {
+    /// Which heading the dialog shows. The tool names switched on here are protocol
+    /// identifiers and stay as they are; nil falls back to showing the tool name itself.
+    private static func titleKey(for tool: String) -> L10n.Key? {
         switch tool {
-        case "Bash": return "Run command"
-        case "Edit", "MultiEdit": return "Edit"
-        case "Write": return "Write file"
-        case "NotebookEdit": return "Edit notebook"
-        case "WebFetch": return "Fetch URL"
-        default: return tool.hasPrefix("mcp__") ? "MCP tool" : tool
+        case "Bash": return .permTitleRunCommand
+        case "Edit", "MultiEdit": return .permTitleEdit
+        case "Write": return .permTitleWriteFile
+        case "NotebookEdit": return .permTitleEditNotebook
+        case "WebFetch": return .permTitleFetchURL
+        default: return tool.hasPrefix("mcp__") ? .permTitleMCPTool : nil
         }
     }
 

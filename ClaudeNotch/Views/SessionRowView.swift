@@ -16,12 +16,12 @@ struct SessionRowView: View {
             header
             // Compact status line; full permission/question/detail live in the focused view.
             if session.pendingPermission != nil {
-                needsYouLine(icon: "exclamationmark.triangle.fill", text: "Permission needed", tint: Theme.amber)
+                needsYouLine(icon: "exclamationmark.triangle.fill", text: L(.permissionNeeded), tint: Theme.amber)
             } else if session.pendingQuestion != nil {
-                needsYouLine(icon: "bubble.left.fill", text: "Question waiting", tint: Theme.amber)
+                needsYouLine(icon: "bubble.left.fill", text: L(.questionWaiting), tint: Theme.amber)
             } else if let completion = session.completion {
                 needsYouLine(icon: completion.succeeded ? "checkmark.seal.fill" : "exclamationmark.octagon.fill",
-                             text: completion.succeeded ? "Task completed" : "Error",
+                             text: completion.succeeded ? L(.taskCompletedShort) : L(.errorTitle),
                              tint: completion.succeeded ? Theme.green : Theme.red)
             } else {
                 activityLine
@@ -29,25 +29,53 @@ struct SessionRowView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            withAnimation(Theme.quickSpring) { store.selectedID = session.id }
+            withAnimation(Theme.Motion.quick) { store.selectedID = session.id }
         }
         .onHover { hovering = $0 }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: Theme.rowCorner, style: .continuous)
                 .fill(hovering || highlighted ? Theme.surfaceHi : Theme.surface)
-                .overlay(
+                .overlay(alignment: .top) {
+                    // A hairline along the top edge reads as a raised surface.
                     RoundedRectangle(cornerRadius: Theme.rowCorner, style: .continuous)
                         .strokeBorder(borderTint, lineWidth: borderWidth)
-                )
+                        .overlay(alignment: .top) {
+                            LinearGradient(colors: [.white.opacity(0.06), .clear],
+                                           startPoint: .top, endPoint: .bottom)
+                                .frame(height: 12)
+                                .allowsHitTesting(false)
+                                .mask(RoundedRectangle(cornerRadius: Theme.rowCorner,
+                                                       style: .continuous))
+                        }
+                }
         )
-        .animation(Theme.quickSpring, value: hovering)
-        .animation(Theme.quickSpring, value: highlighted)
-        .animation(Theme.quickSpring, value: session.status)
+        // One flash when this session starts needing you — enough to catch the eye
+        // without turning into a strobe that has to be looked away from.
+        .keyframeAnimator(initialValue: 0.0, trigger: session.status) { view, flash in
+            view.overlay(
+                RoundedRectangle(cornerRadius: Theme.rowCorner, style: .continuous)
+                    .strokeBorder(Theme.amber, lineWidth: 1.5)
+                    .opacity(flash)
+                    .allowsHitTesting(false)
+            )
+        } keyframes: { _ in
+            if session.status == .waiting && Theme.Motion.loopsAllowed {
+                CubicKeyframe(0.9, duration: 0.12)
+                CubicKeyframe(0.0, duration: 0.55)
+            } else {
+                LinearKeyframe(0.0, duration: 0.01)
+            }
+        }
+        .offset(y: hovering ? -1 : 0)
+        .animation(Theme.Motion.quick, value: hovering)
+        .animation(Theme.Motion.quick, value: highlighted)
+        .animation(Theme.Motion.quick, value: session.status)
     }
 
     private var borderTint: Color {
-        if highlighted { return Theme.blue.opacity(0.8) }
+        // Neutral rather than blue: a blue outline reads as a system focus ring.
+        if highlighted { return Theme.text.opacity(0.35) }
         return session.status == .waiting ? Theme.amber.opacity(0.5) : Theme.stroke
     }
 
@@ -60,7 +88,7 @@ struct SessionRowView: View {
             Image(systemName: icon).font(.system(size: 10)).foregroundStyle(tint)
             Text(text).font(Theme.caption.weight(.medium)).foregroundStyle(tint)
             Spacer()
-            Text("tap to open").font(Theme.micro).foregroundStyle(Theme.dim)
+            Text(L(.tapToOpen)).font(Theme.micro).foregroundStyle(Theme.dim)
         }
     }
 
@@ -88,7 +116,7 @@ struct SessionRowView: View {
                         .font(Theme.micro).foregroundStyle(Theme.dim)
                         .lineLimit(1)
                     if !session.task.isEmpty {
-                        Text("You: \(session.task)")
+                        Text(L(.youSaid, session.task))
                             .font(Theme.caption).foregroundStyle(Theme.textDim)
                             .lineLimit(1)
                     }
@@ -105,7 +133,11 @@ struct SessionRowView: View {
                         Badge(text: t, tint: Theme.textDim)
                     }
                 }
-                Text(elapsedText).font(Theme.micro).foregroundStyle(Theme.dim)
+                // Driven by the system clock, not by a redraw: the old computed string
+                // only updated when something else in the row changed, so it sat frozen.
+                Text(session.startedAt, style: .timer)
+                    .font(Theme.micro).foregroundStyle(Theme.dim)
+                    .monospacedDigit()
             }
         }
     }
@@ -113,7 +145,7 @@ struct SessionRowView: View {
     private var statusGlyph: some View {
         Group {
             if session.status == .working {
-                WorkingBars(color: session.status.color)
+                WorkingBars(color: session.status.color, activity: session.activity)
             } else {
                 Image(systemName: session.activity.sfSymbol)
                     .font(.system(size: 9))
@@ -137,14 +169,12 @@ struct SessionRowView: View {
             Spacer()
             if session.filesAdded > 0 || session.filesRemoved > 0 {
                 Text("+\(session.filesAdded)").font(Theme.micro).foregroundStyle(Theme.green)
+                    .contentTransition(.numericText(value: Double(session.filesAdded)))
                 Text("-\(session.filesRemoved)").font(Theme.micro).foregroundStyle(Theme.red)
+                    .contentTransition(.numericText(value: Double(session.filesRemoved)))
             }
         }
-    }
-
-    private var elapsedText: String {
-        let t = Int(session.elapsed)
-        let m = t / 60, s = t % 60
-        return m > 0 ? "\(m)m \(s)s" : "\(s)s"
+        .animation(Theme.Motion.value, value: session.filesAdded)
+        .animation(Theme.Motion.value, value: session.filesRemoved)
     }
 }

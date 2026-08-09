@@ -85,7 +85,9 @@ struct Completion: Equatable {
     var duration: TimeInterval
     var filesAdded: Int
     var filesRemoved: Int
-    var testsStatus: String?      // "passing" / "failing" / nil
+    // A Bool rather than the display text: the badge used to be coloured by searching
+    // that text for "pass", so the moment it was translated every badge turned red.
+    var testsPassed: Bool?        // nil when the log said nothing about tests
     var succeeded: Bool
     var summary: String
 }

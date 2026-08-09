@@ -6,6 +6,11 @@ import Foundation
 /// touches the main actor.
 final class HookServer: @unchecked Sendable {
     private let coordinator: HookCoordinator
+
+    /// App-level control messages (`ping` / `show` / `quit`) the coordinator knows
+    /// nothing about. Return nil to let the message fall through to the coordinator.
+    var onAppControl: (@MainActor @Sendable (String) -> [String: Any]?)?
+
     private var listenFD: Int32 = -1
     private let queue = DispatchQueue(label: "com.ozan.ClaudeNotch.hookserver",
                                       qos: .userInitiated, attributes: .concurrent)
@@ -59,8 +64,9 @@ final class HookServer: @unchecked Sendable {
             let decision = obj["decision"] as? String ?? ""
             Task { @MainActor [weak self] in
                 guard let self else { close(conn); return }
-                let ok = self.coordinator.control(action: control, session: session, decision: decision)
-                let reply: [String: Any] = ["ok": ok]
+                let reply: [String: Any] = self.onAppControl?(control)
+                    ?? ["ok": self.coordinator.control(action: control,
+                                                       session: session, decision: decision)]
                 UnixSocket.writeAll(conn, (try? JSONSerialization.data(withJSONObject: reply)) ?? Data())
                 close(conn)
             }

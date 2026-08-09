@@ -5,9 +5,13 @@ import Foundation
 enum UnixSocket {
 
     /// Where the app listens and the hook client connects.
+    ///
+    /// `NOTCH_INSTANCE` gives a throwaway copy its own socket, so a test build can run
+    /// beside the installed one without either stealing the other's hooks.
     static var socketPath: String {
         let dir = appSupportDir()
-        return dir.appendingPathComponent("notch.sock").path
+        let suffix = ProcessInfo.processInfo.environment["NOTCH_INSTANCE"].map { "-\($0)" } ?? ""
+        return dir.appendingPathComponent("notch\(suffix).sock").path
     }
 
     static func appSupportDir() -> URL {
@@ -61,6 +65,26 @@ enum UnixSocket {
         let reply = readToEnd(fd)
         guard !reply.isEmpty else { return nil }
         return (try? JSONSerialization.jsonObject(with: reply)) as? [String: Any]
+    }
+
+    // MARK: Control messages
+
+    /// Send an app-level control message (`ping` / `show` / `quit`) to a running
+    /// instance. Returns its reply, or nil when nothing is listening.
+    @discardableResult
+    static func sendControl(_ control: String, timeout: TimeInterval = 2) -> [String: Any]? {
+        let msg: [String: Any] = ["control": control]
+        guard let data = try? JSONSerialization.data(withJSONObject: msg) else { return nil }
+        return request(data, timeout: timeout)
+    }
+
+    /// Is another copy of the app already serving the socket? A stale socket file with
+    /// no listener fails to connect and reports nil, as does an instance wedged long
+    /// enough to miss the timeout — in both cases taking the socket over is correct.
+    static func probeRunningInstance(timeout: TimeInterval = 1) -> [String: Any]? {
+        guard let reply = sendControl("ping", timeout: timeout),
+              reply["ok"] as? Bool == true else { return nil }
+        return reply
     }
 
     // MARK: I/O

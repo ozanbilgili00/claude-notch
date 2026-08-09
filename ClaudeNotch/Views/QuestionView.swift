@@ -12,7 +12,7 @@ struct QuestionView: View {
             HStack(spacing: 6) {
                 Image(systemName: "bubble.left.fill")
                     .font(.system(size: 10)).foregroundStyle(Theme.amber)
-                Text("Claude's Question").font(Theme.title)
+                Text(L(.questionTitle)).font(Theme.title)
             }
             HStack(spacing: 4) {
                 if let h = question.header {
@@ -40,7 +40,7 @@ struct QuestionView: View {
 
     private func resolve(_ choice: Question.Choice) {
         // Routed to the coordinator, which sends the answer back to Claude Code.
-        withAnimation(Theme.quickSpring) {
+        withAnimation(Theme.Motion.quick) {
             store.onQuestionAnswer?(session.id, choice.index)
         }
     }

@@ -20,8 +20,8 @@ struct CircularGauge: View {
                     .trim(from: 0, to: clamped)
                     .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .animation(Theme.quickSpring, value: clamped)
-                Text("\(Int(clamped * 100))%")
+                    .animation(Theme.Motion.quick, value: clamped)
+                Text(L10n.percent(Int(clamped * 100), Localization.shared.language))
                     .font(Theme.mono(12, .semibold))
                     .foregroundStyle(Theme.text)
                     .contentTransition(.numericText())
@@ -42,21 +42,21 @@ struct UsageDashboardView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 24) {
-                CircularGauge(progress: usage.fiveHourPercent, label: "5-hour",
+                CircularGauge(progress: usage.fiveHourPercent, label: L(.usageFiveHourLong),
                               caption: usage.fiveHourResetsIn, tint: tint(usage.fiveHourPercent))
-                CircularGauge(progress: usage.weeklyPercent, label: "7-day",
+                CircularGauge(progress: usage.weeklyPercent, label: L(.usageWeeklyLong),
                               caption: usage.weeklyResetsIn, tint: tint(usage.weeklyPercent))
                 // Plans without a separate Opus allowance simply don't get this ring.
                 if let opus = usage.opusPercent {
-                    CircularGauge(progress: opus, label: "Opus 7-day",
-                                  caption: usage.opusResetsIn ?? "—", tint: tint(opus))
+                    CircularGauge(progress: opus, label: L(.usageOpusLong),
+                                  caption: usage.opusResetsIn, tint: tint(opus))
                 }
             }
             if let used = usage.extraCreditsUsed {
                 extraCredits(used: used, limit: usage.extraCreditsLimit)
             }
             if !usage.isLive {
-                Text("Sign in to Claude Code to see live limits")
+                Text(L(.usageSignIn))
                     .font(Theme.micro).foregroundStyle(Theme.dim)
             }
         }
@@ -65,14 +65,16 @@ struct UsageDashboardView: View {
     /// Pay-as-you-go credits, shown only when the account has them enabled.
     private func extraCredits(used: Double, limit: Double?) -> some View {
         HStack(spacing: 4) {
-            Text("extra credits").font(Theme.micro).foregroundStyle(Theme.dim)
+            Text(L(.usageExtraCredits)).font(Theme.micro).foregroundStyle(Theme.dim)
             Text(limit.map { "$\(fmt(used)) / $\(fmt($0))" } ?? "$\(fmt(used))")
                 .font(Theme.micro.weight(.semibold)).foregroundStyle(Theme.textDim)
         }
     }
 
+    /// The dollar sign stays — Anthropic bills in USD regardless of display language —
+    /// but the decimal separator follows it.
     private func fmt(_ v: Double) -> String {
-        v == v.rounded() ? String(Int(v)) : String(format: "%.2f", v)
+        L10n.decimal(v, Localization.shared.language)
     }
 
     private func tint(_ pct: Double) -> Color {

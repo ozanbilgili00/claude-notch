@@ -50,16 +50,16 @@ enum ActivityKind: String, Codable {
         }
     }
 
-    var verb: String {
+    @MainActor var verb: String {
         switch self {
-        case .editing:   return "Editing"
-        case .running:   return "Running tests"
-        case .shell:     return "Running"
-        case .planning:  return "Planning"
-        case .searching: return "Searching"
-        case .reading:   return "Reading"
-        case .waiting:   return "Waiting"
-        case .idle:      return "Idle"
+        case .editing:   return L(.activityEditing)
+        case .running:   return L(.activityRunningTests)
+        case .shell:     return L(.activityRunning)
+        case .planning:  return L(.activityPlanning)
+        case .searching: return L(.activitySearching)
+        case .reading:   return L(.activityReading)
+        case .waiting:   return L(.activityWaiting)
+        case .idle:      return L(.activityIdle)
         }
     }
 }

@@ -13,7 +13,8 @@ enum QuestionParser {
         let options = (q0["options"] as? [[String: Any]]) ?? []
         let choices = options.enumerated().map { idx, o in
             Question.Choice(index: idx + 1,
-                            label: o["label"] as? String ?? "Option \(idx + 1)",
+                            label: o["label"] as? String ?? L10n.string(.optionFallback, Localization.stored)
+                                .replacingOccurrences(of: "%d", with: "\(idx + 1)"),
                             detail: o["description"] as? String)
         }
         guard !choices.isEmpty else { return nil }

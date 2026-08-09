@@ -14,8 +14,8 @@ enum MockData {
     }
 
     static let usage = UsageSnapshot(
-        fiveHourPercent: 0.09, fiveHourResetsIn: "4h10m",
-        weeklyPercent: 0.09, weeklyResetsIn: "6d12h",
+        fiveHourPercent: 0.09, fiveHourResetsAt: Date().addingTimeInterval(4 * 3600 + 10 * 60),
+        weeklyPercent: 0.09, weeklyResetsAt: Date().addingTimeInterval(6 * 86400 + 12 * 3600),
         sessionTokens: 128_400, todayTokens: 1_240_000, weekTokens: 8_900_000,
         isLive: true
     )
@@ -45,7 +45,7 @@ enum MockData {
             ]
             if ProcessInfo.processInfo.environment["NOTCH_MOCK_DONE"] == "1" {
                 s.completion = Completion(duration: 254, filesAdded: 42, filesRemoved: 12,
-                                          testsStatus: "tests passing", succeeded: true,
+                                          testsPassed: true, succeeded: true,
                                           summary: "Removed duplicate dispatches in the event pipeline")
             }
             return s
@@ -96,7 +96,7 @@ enum MockData {
     /// A permission request to preview the Allow / Deny screen.
     static var samplePermission: PermissionRequest {
         PermissionRequest(
-            id: "p1", toolName: "Edit", title: "Edit", reason: nil, risk: .low,
+            id: "p1", toolName: "Edit", titleKey: .permTitleEdit, reason: nil, risk: .low,
             command: nil, filePath: "src/components/App.tsx",
             diff: [
                 .init(kind: .removed, oldNumber: 1, newNumber: nil, text: "const theme = 'light'"),

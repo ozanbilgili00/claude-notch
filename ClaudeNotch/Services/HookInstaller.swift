@@ -36,6 +36,47 @@ enum HookInstaller {
         }
     }
 
+    // MARK: Health
+
+    /// What settings.json currently points at, relative to the copy that's running.
+    enum Health: Equatable {
+        case notInstalled
+        case ok
+        /// Hooks reference a different build. `exists` is false once it's been deleted —
+        /// the usual end state of an Xcode DerivedData build.
+        case pointsElsewhere(path: String, exists: Bool)
+    }
+
+    static func health() -> Health {
+        guard let installed = installedBinaryPath() else { return .notInstalled }
+        if installed == AppInfo.executablePath { return .ok }
+        return .pointsElsewhere(path: installed,
+                                exists: FileManager.default.isExecutableFile(atPath: installed))
+    }
+
+    /// The binary path our hook entries currently invoke, if any.
+    static func installedBinaryPath() -> String? {
+        guard let root = readSettings(),
+              let hooks = root["hooks"] as? [String: Any] else { return nil }
+        for value in hooks.values {
+            guard let arr = value as? [[String: Any]] else { continue }
+            for entry in arr {
+                for command in commandsIn(entry) where command.contains(marker) {
+                    return binaryPath(in: command)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Pull the executable out of `"/path/to/ClaudeNotch" --hook PreToolUse`.
+    private static func binaryPath(in command: String) -> String? {
+        if command.hasPrefix("\""), let end = command.dropFirst().firstIndex(of: "\"") {
+            return String(command[command.index(after: command.startIndex)..<end])
+        }
+        return command.split(separator: " ").first.map(String.init)
+    }
+
     // MARK: Install / uninstall
 
     static func install() throws {

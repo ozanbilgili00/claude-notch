@@ -13,70 +13,112 @@ struct SettingsView: View {
     @AppStorage("interceptQuestions") private var interceptQuestions = true
 
     @State private var theme = ThemeSettings.shared
+    @State private var l10n = Localization.shared
     @State private var hooksInstalled = HookInstaller.isInstalled()
+    @State private var hookHealth = HookInstaller.health()
     @State private var hookError: String?
     @State private var loginError: String?
 
     var body: some View {
         TabView {
-            general.tabItem { Label("General", systemImage: "gearshape") }
-            about.tabItem { Label("About", systemImage: "info.circle") }
+            general.tabItem { Label(L(.tabGeneral), systemImage: "gearshape") }
+            about.tabItem { Label(L(.tabAbout), systemImage: "info.circle") }
         }
         .frame(width: 460, height: 320)
     }
 
     private var general: some View {
         Form {
-            Section("Startup") {
-                Toggle("Launch at login", isOn: $autoLaunch)
+            Section(L(.sectionLanguage)) {
+                // Each language is named in itself, so it stays findable whichever one
+                // the app happens to be showing.
+                Picker(L(.sectionLanguage), selection: Binding(
+                    get: { l10n.language },
+                    set: { l10n.language = $0 }
+                )) {
+                    ForEach(Localization.Language.allCases) { lang in
+                        Text(lang.endonym).tag(lang)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            Section(L(.sectionStartup)) {
+                Toggle(L(.launchAtLogin), isOn: $autoLaunch)
                     .onChange(of: autoLaunch) { _, on in setLaunchAtLogin(on) }
                 if let loginError {
                     Text(loginError).font(.caption).foregroundStyle(.red)
                 }
             }
-            Section("Notch") {
-                Toggle("Auto-collapse when idle", isOn: $autoCollapse)
-                Toggle("Compact mode", isOn: $compactMode)
-                Picker("Accent color", selection: Binding(
+            Section(L(.sectionNotch)) {
+                Toggle(L(.autoCollapseWhenIdle), isOn: $autoCollapse)
+                Toggle(L(.compactMode), isOn: $compactMode)
+                Picker(L(.accentColor), selection: Binding(
                     get: { theme.accent },
                     set: { theme.accent = $0 }
                 )) {
                     ForEach(ThemeSettings.Accent.allCases) { accent in
                         HStack {
                             Circle().fill(accent.color).frame(width: 10, height: 10)
-                            Text(accent.label)
+                            Text(accent.displayName)
                         }
                         .tag(accent)
                     }
                 }
-                Text("Applies to accents only — working / waiting / error keep their colors so status stays readable.")
+                Text(L(.accentNote))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Alerts") {
-                Toggle("Notifications", isOn: $notifications)
+            Section(L(.sectionAlerts)) {
+                Toggle(L(.notifications), isOn: $notifications)
             }
-            Section("Notch interaction") {
-                Toggle("Answer permissions in notch", isOn: $interceptPermissions)
-                Toggle("Answer questions in notch", isOn: $interceptQuestions)
-                Text("When on, permission prompts and Claude's questions (in default permission mode) are handled in the notch instead of the terminal.")
+            Section(L(.sectionNotchInteraction)) {
+                Toggle(L(.answerPermissionsInNotch), isOn: $interceptPermissions)
+                Toggle(L(.answerQuestionsInNotch), isOn: $interceptQuestions)
+                Text(L(.interceptNote))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Claude Code integration") {
-                LabeledContent("Observer hooks") {
+            Section(L(.sectionIntegration)) {
+                LabeledContent(L(.observerHooks)) {
                     HStack(spacing: 8) {
-                        Text(hooksInstalled ? "Installed" : "Not installed")
+                        Text(hooksInstalled ? L(.installed) : L(.notInstalled))
                             .foregroundStyle(hooksInstalled ? .green : .secondary)
-                        Button(hooksInstalled ? "Remove" : "Install") { toggleHooks() }
+                        Button(hooksInstalled ? L(.remove) : L(.install)) { toggleHooks() }
                     }
                 }
                 if let error = hookError {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }
-                Text("Adds observer hooks to ~/.claude/settings.json so the notch can see your Claude Code sessions. Your other settings are preserved; removing is safe.")
+                mismatchWarning
+                Text(L(.hooksNote))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .onAppear { refreshHookState() }
+    }
+
+    /// The failure this app is most likely to hit: settings.json still invokes an older
+    /// copy (a stale Xcode build, or one that's since been deleted), so hooks quietly
+    /// reach a binary that isn't the one you're looking at — or nothing at all.
+    @ViewBuilder
+    private var mismatchWarning: some View {
+        if case .pointsElsewhere(let path, let exists) = hookHealth {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(exists ? L(.hooksPointElsewhere) : L(.hooksPointMissing),
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(exists ? .orange : .red)
+                Text(path)
+                    .font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    .lineLimit(2).truncationMode(.middle)
+                Button(L(.pointAtThisCopy)) { toggleHooks(forceInstall: true) }
+                    .controlSize(.small)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 6)
+                .fill((exists ? Color.orange : Color.red).opacity(0.12)))
+        }
     }
 
     /// Register the app itself as a login item. Reverts the toggle if macOS refuses,
@@ -92,26 +134,37 @@ struct SettingsView: View {
         }
     }
 
-    private func toggleHooks() {
+    private func toggleHooks(forceInstall: Bool = false) {
         do {
-            if hooksInstalled { try HookInstaller.uninstall() }
+            if hooksInstalled && !forceInstall { try HookInstaller.uninstall() }
             else { try HookInstaller.install() }
-            hooksInstalled = HookInstaller.isInstalled()
             hookError = nil
         } catch {
             hookError = error.localizedDescription
         }
+        refreshHookState()
+    }
+
+    private func refreshHookState() {
+        hooksInstalled = HookInstaller.isInstalled()
+        hookHealth = HookInstaller.health()
     }
 
     private var about: some View {
         VStack(spacing: 8) {
             Image(systemName: "circle.hexagongrid.fill").font(.largeTitle)
             Text("Claude Notch").font(.headline)
-            Text("A native companion for Claude Code that lives in the notch.")
+            Text(L(.aboutTagline))
                 .font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Text("v0.1 · \(store.sessions.count) sessions observed")
+            Text("\(AppInfo.version) · "
+                 + Lcount(.sessionsObservedOne, .sessionsObservedMany, store.sessions.count))
                 .font(.caption2).foregroundStyle(.secondary)
+            // Which copy is running and how it's signed. A stable signature is what
+            // keeps macOS from re-asking for notification / automation access on
+            // every rebuild, so it's worth being able to see it at a glance.
+            Text(L(.signedBy, AppInfo.originLabel, AppInfo.signingAuthority ?? L(.signedByNobody)))
+                .font(.caption2.monospaced()).foregroundStyle(.secondary)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -17,10 +17,10 @@ struct QuickSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            toggleRow("Sounds", isOn: Binding(get: { !muteSounds },
+            toggleRow(L(.sounds), isOn: Binding(get: { !muteSounds },
                                               set: { muteSounds = !$0 }))
-            toggleRow("Notifications", isOn: $notifications)
-            toggleRow("Auto-collapse", isOn: $autoCollapse)
+            toggleRow(L(.notifications), isOn: $notifications)
+            toggleRow(L(.autoCollapse), isOn: $autoCollapse)
 
             Divider().overlay(Theme.stroke).padding(.vertical, 4)
 
@@ -33,12 +33,12 @@ struct QuickSettingsView: View {
 
             Divider().overlay(Theme.stroke).padding(.vertical, 4)
 
-            actionRow("All Settings…") {
+            actionRow(L(.allSettings)) {
                 onClose()
                 NSApp.activate(ignoringOtherApps: true)
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             }
-            actionRow("Quit Claude Notch") { NSApp.terminate(nil) }
+            actionRow(L(.quitApp)) { NSApp.terminate(nil) }
         }
         .padding(.vertical, 6)
         .frame(width: 230)
@@ -68,9 +68,9 @@ struct QuickSettingsView: View {
             Image(systemName: hooksInstalled ? "checkmark.circle.fill" : "circle.dashed")
                 .font(.system(size: 10))
                 .foregroundStyle(hooksInstalled ? Theme.green : Theme.dim)
-            Text("Hooks").font(Theme.caption).foregroundStyle(Theme.text)
+            Text(L(.hooks)).font(Theme.caption).foregroundStyle(Theme.text)
             Spacer()
-            Button(hooksInstalled ? "Remove" : "Install", action: toggleHooks)
+            Button(hooksInstalled ? L(.remove) : L(.install), action: toggleHooks)
                 .buttonStyle(.plain)
                 .font(Theme.micro.weight(.medium))
                 .foregroundStyle(Theme.blue)

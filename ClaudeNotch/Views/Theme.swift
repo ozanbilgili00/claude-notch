@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Retro-terminal design system for Claude Notch.
 /// Dark, high-contrast, monospaced — with colored badges for models/tools,
@@ -34,9 +35,50 @@ enum Theme {
     static let panelCorner: CGFloat = 22      // expanded panel corners
     static let rowCorner: CGFloat = 10
 
-    /// Approximate spring used for open/close, matched to Dynamic Island feel.
-    static var expandSpring: Animation { .spring(response: 0.42, dampingFraction: 0.82) }
-    static var quickSpring: Animation { .spring(response: 0.28, dampingFraction: 0.86) }
+    // MARK: Motion
+
+    /// Every animation in the app, in one place, so "Reduce Motion" is a single switch
+    /// rather than a hunt through view files.
+    enum Motion {
+        /// macOS's own accessibility preference. Read live: it is cheap, and the value
+        /// only needs to be right at the moment an animation starts.
+        /// `NOTCH_REDUCE_MOTION=1` forces it on, so the reduced path can be exercised
+        /// without changing a system setting.
+        static var reduced: Bool {
+            if ProcessInfo.processInfo.environment["NOTCH_REDUCE_MOTION"] == "1" { return true }
+            return NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        }
+
+        /// Opening gets a little overshoot, closing gets none — the asymmetry is what
+        /// makes a panel feel like it springs out and settles back rather than bouncing
+        /// in both directions.
+        static var open: Animation {
+            reduced ? .easeOut(duration: 0.18)
+                    : .spring(response: 0.48, dampingFraction: 0.76)
+        }
+        static var close: Animation {
+            reduced ? .easeOut(duration: 0.14)
+                    : .spring(response: 0.34, dampingFraction: 0.92)
+        }
+        static var quick: Animation {
+            reduced ? .easeOut(duration: 0.12)
+                    : .spring(response: 0.28, dampingFraction: 0.86)
+        }
+        /// For value read-outs: snappy, no bounce, so numbers stay legible mid-flight.
+        static var value: Animation {
+            reduced ? .linear(duration: 0.01) : .snappy(duration: 0.28)
+        }
+
+        /// Delay between successive rows in a staggered reveal.
+        static let stagger: Double = 0.03
+        /// How long the closed pill lingers before the panel takes over. Fading the
+        /// outgoing content faster than the incoming reads as growth, not dissolve.
+        static let crossfade: Double = 0.10
+
+        /// Continuous loops (breathing, shimmer, walking) are suppressed entirely when
+        /// the user has asked for less motion.
+        static var loopsAllowed: Bool { !reduced }
+    }
 }
 
 /// A small colored capsule badge — used for model names, tools, terminals.

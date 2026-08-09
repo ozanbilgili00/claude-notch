@@ -44,7 +44,14 @@ final class PassthroughHostingView<Content: View>: NSHostingView<Content> {
     /// gaps, spacer padding), so we disable it and use plain AppKit hit-testing.
     var passthroughEnabled: Bool = true
 
+    /// Height of the actual notch body, measured from the top of the view. The window is
+    /// deliberately taller so the status glow has room to spill; everything below the
+    /// body is empty and must not swallow clicks meant for the desktop behind it.
+    var contentHeight: CGFloat?
+
     override func hitTest(_ point: NSPoint) -> NSView? {
+        // AppKit's default coordinate space puts the origin at the bottom-left.
+        if let contentHeight, point.y < bounds.height - contentHeight { return nil }
         guard passthroughEnabled else { return super.hitTest(point) }
         let result = super.hitTest(point)
         // If the deepest hit is the hosting view's background itself, pass through.

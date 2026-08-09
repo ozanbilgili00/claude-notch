@@ -152,6 +152,74 @@ group("PermissionPolicy — risk") {
     check(PermissionPolicy.risk(tool: "Edit", command: nil) != .high, "a plain edit is not high")
 }
 
+// MARK: - Localization
+
+/// The translation tables are the part of this feature most likely to rot: a key added
+/// for one language and forgotten in the other renders as the raw key name, and a format
+/// specifier that doesn't match between languages crashes `String(format:)` at runtime.
+
+group("L10n — table coverage") {
+    let missingTR = L10n.Key.allCases.filter { L10n.tr[$0] == nil }
+    let missingEN = L10n.Key.allCases.filter { L10n.en[$0] == nil }
+    check(missingTR.isEmpty, "every key has Turkish: missing \(missingTR.map(\.rawValue))")
+    check(missingEN.isEmpty, "every key has English: missing \(missingEN.map(\.rawValue))")
+    equal(L10n.tr.count, L10n.Key.allCases.count, "no stale Turkish entries")
+    equal(L10n.en.count, L10n.Key.allCases.count, "no stale English entries")
+
+    let blank = L10n.Key.allCases.filter {
+        (L10n.tr[$0] ?? "").isEmpty || (L10n.en[$0] ?? "").isEmpty
+    }
+    check(blank.isEmpty, "no blank translations: \(blank.map(\.rawValue))")
+}
+
+group("L10n — format specifiers match across languages") {
+    /// `%d` / `%@` in order of appearance. `String(format:)` reads arguments positionally,
+    /// so both languages must ask for the same ones in the same order.
+    func specifiers(_ s: String) -> [String] {
+        var out: [String] = []
+        let chars = Array(s)
+        var i = 0
+        while i < chars.count - 1 {
+            if chars[i] == "%" {
+                let next = chars[i + 1]
+                if next == "%" { i += 2; continue }
+                out.append("%\(next)")
+                i += 2
+                continue
+            }
+            i += 1
+        }
+        return out
+    }
+
+    for key in L10n.Key.allCases {
+        let tr = specifiers(L10n.tr[key] ?? "")
+        let en = specifiers(L10n.en[key] ?? "")
+        equal(tr, en, "\(key.rawValue) specifiers agree")
+    }
+}
+
+group("L10n — lookup falls back rather than blanking") {
+    equal(L10n.string(.deny, .tr), "Reddet", "Turkish lookup")
+    equal(L10n.string(.deny, .en), "Deny", "English lookup")
+    // The percent sign leads in Turkish and trails in English.
+    equal(L10n.percent(15, .tr), "%15", "Turkish percent")
+    equal(L10n.percent(15, .en), "15%", "English percent")
+    equal(L10n.decimal(1.5, .tr), "1,50", "Turkish decimal separator")
+    equal(L10n.decimal(1.5, .en), "1.50", "English decimal separator")
+    equal(L10n.decimal(3, .tr), "3", "whole numbers keep no decimals")
+}
+
+group("L10n — model-facing strings stay English") {
+    // These go to Claude, not to the user; translating them degrades its behaviour.
+    let denyReply = PermissionPolicy.reply(for: .deny)
+    let stdout = denyReply["stdout"] as? String ?? ""
+    check(stdout.contains("Denied in Claude Notch"), "deny reason is still English")
+    let allowReply = PermissionPolicy.reply(for: .allowOnce)
+    check((allowReply["stdout"] as? String ?? "").contains("Approved in Claude Notch"),
+          "approve reason is still English")
+}
+
 // MARK: - Report
 
 print("")

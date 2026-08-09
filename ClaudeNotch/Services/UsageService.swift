@@ -40,11 +40,11 @@ final class UsageService: @unchecked Sendable {
             if dbg { fputs("[usage] 5h=\(snapshot.fiveHour) 7d=\(snapshot.sevenDay)\n", stderr) }
             await MainActor.run {
                 self.store.usage.fiveHourPercent = snapshot.fiveHour
-                self.store.usage.fiveHourResetsIn = snapshot.fiveHourResets
+                self.store.usage.fiveHourResetsAt = snapshot.fiveHourResets
                 self.store.usage.weeklyPercent = snapshot.sevenDay
-                self.store.usage.weeklyResetsIn = snapshot.sevenDayResets
+                self.store.usage.weeklyResetsAt = snapshot.sevenDayResets
                 self.store.usage.opusPercent = snapshot.opus
-                self.store.usage.opusResetsIn = snapshot.opusResets
+                self.store.usage.opusResetsAt = snapshot.opusResets
                 self.store.usage.extraCreditsUsed = snapshot.extraUsed
                 self.store.usage.extraCreditsLimit = snapshot.extraLimit
                 self.store.usage.severity = snapshot.severity
@@ -56,9 +56,9 @@ final class UsageService: @unchecked Sendable {
     // MARK: Fetch
 
     private struct Parsed {
-        var fiveHour: Double, fiveHourResets: String
-        var sevenDay: Double, sevenDayResets: String
-        var opus: Double?, opusResets: String?
+        var fiveHour: Double, fiveHourResets: Date?
+        var sevenDay: Double, sevenDayResets: Date?
+        var opus: Double?, opusResets: Date?
         var extraUsed: Double?, extraLimit: Double?
         var severity: String?
     }
@@ -75,17 +75,16 @@ final class UsageService: @unchecked Sendable {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
 
-        func window(_ key: String) -> (Double, String) {
-            guard let w = json[key] as? [String: Any] else { return (0, "—") }
+        func window(_ key: String) -> (Double, Date?) {
+            guard let w = json[key] as? [String: Any] else { return (0, nil) }
             let pct = (w["utilization"] as? Double) ?? 0
-            let resets = (w["resets_at"] as? String).flatMap(Self.countdown) ?? "—"
-            return (pct / 100.0, resets)
+            return (pct / 100.0, (w["resets_at"] as? String).flatMap(Self.resetDate))
         }
         let five = window("five_hour")
         let seven = window("seven_day")
 
         // Opus gets its own weekly window on some plans and is absent (null) on others.
-        var opus: (Double, String)?
+        var opus: (Double, Date?)?
         if json["seven_day_opus"] is [String: Any] { opus = window("seven_day_opus") }
 
         // Extra credits only exist once the user switches them on.
@@ -134,19 +133,13 @@ final class UsageService: @unchecked Sendable {
 
     // MARK: Countdown formatting
 
-    /// "2026-07-23T19:50:00+00:00" → "4h10m" (or "6d12h" for multi-day spans).
-    static func countdown(from iso: String) -> String? {
+    /// "2026-07-23T19:50:00+00:00" → the reset date. Rendering it as a countdown is the
+    /// view's job (see `UsageSnapshot.countdown`), so it stays current between fetches.
+    static func resetDate(from iso: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let date = formatter.date(from: iso)
             ?? { let f = ISO8601DateFormatter(); return f.date(from: iso) }()
-        guard let date else { return nil }
-        let interval = max(0, date.timeIntervalSinceNow)
-        let totalMinutes = Int(interval / 60)
-        let days = totalMinutes / (60 * 24)
-        let hours = (totalMinutes % (60 * 24)) / 60
-        let minutes = totalMinutes % 60
-        if days > 0 { return "\(days)d\(hours)h" }
-        return "\(hours)h\(minutes)m"
+        return date
     }
 }

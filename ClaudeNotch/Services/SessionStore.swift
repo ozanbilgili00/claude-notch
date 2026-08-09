@@ -39,6 +39,22 @@ final class SessionStore {
 
     var workingCount: Int { sessions.filter { $0.status == .working }.count }
 
+    /// One-word summary of everything, shared by the closed pill and the panel header so
+    /// the two never disagree mid-morph.
+    /// Kept short in every language: it flies between the two layouts as one element, so
+    /// the narrow closed pill sets the budget for both.
+    var statusWord: String {
+        if let b = blockingSession {
+            return b.pendingPermission != nil ? L(.statusPermission) : L(.statusQuestion)
+        }
+        switch aggregateStatus {
+        case .working: return L(.statusWorking)
+        case .waiting: return L(.statusWaiting)
+        case .error:   return L(.statusError)
+        case .idle:    return L(.statusIdle)
+        }
+    }
+
     // MARK: Mutation helpers
 
     func upsert(_ session: Session) {

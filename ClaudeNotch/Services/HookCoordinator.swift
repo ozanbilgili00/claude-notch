@@ -191,7 +191,7 @@ final class HookCoordinator {
         }
         if let s = store.session(id) {
             NotificationService.notify(.needsAttention, session: s,
-                                       body: "Permission needed — \(request.toolName)")
+                                       body: L(.notifPermissionNeeded, request.toolName))
         }
 
         // Safety net: if unanswered after 5 minutes, stop blocking and let CC prompt.
@@ -336,17 +336,16 @@ final class HookCoordinator {
                 duration: duration,
                 filesAdded: s.filesAdded,
                 filesRemoved: s.filesRemoved,
-                testsStatus: testStatus(from: s.logTail),
+                testsPassed: testsPassed(from: s.logTail),
                 succeeded: !failed,
-                summary: failed ? (s.activityDetail.isEmpty ? "The turn ended with an error." : s.activityDetail)
+                summary: failed ? (s.activityDetail.isEmpty ? L(.turnEndedWithError) : s.activityDetail)
                                 : (s.task.isEmpty ? "" : s.task)
             )
         }
 
         if let s = store.session(id) {
             NotificationService.notify(failed ? .failed : .completed, session: s,
-                                       body: failed ? "Task ended with an error"
-                                                    : "Task completed")
+                                       body: failed ? L(.notifTaskFailed) : L(.notifTaskCompleted))
         }
 
         // Success cards auto-dismiss after a few seconds; errors stay until dismissed.
@@ -358,11 +357,14 @@ final class HookCoordinator {
         }
     }
 
-    private func testStatus(from log: [String]) -> String? {
+    /// Reads pass/fail out of the tail of the log. The keywords stay English because
+    /// they're matched against test-runner output, not shown to anyone — the badge text
+    /// is looked up separately from the returned Bool.
+    private func testsPassed(from log: [String]) -> Bool? {
         for line in log.reversed() {
             let l = line.lowercased()
-            if l.contains("fail") && (l.contains("test") || l.contains("passed")) { return "tests failing" }
-            if l.contains("pass") && l.contains("test") { return "tests passing" }
+            if l.contains("fail") && (l.contains("test") || l.contains("passed")) { return false }
+            if l.contains("pass") && l.contains("test") { return true }
         }
         return nil
     }

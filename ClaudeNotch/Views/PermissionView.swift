@@ -7,6 +7,9 @@ struct PermissionView: View {
     let session: Session
     let request: PermissionRequest
 
+    /// Flipped once the diff appears, which drives its line-by-line reveal.
+    @State private var diffRevealed = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             titleRow
@@ -28,12 +31,12 @@ struct PermissionView: View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 10)).foregroundStyle(Theme.amber)
-            Text(request.title).font(Theme.title)
+            Text(request.titleKey.map { L($0) } ?? request.toolName).font(Theme.title)
             if let path = request.filePath {
                 Text(path).font(Theme.caption).foregroundStyle(Theme.textDim)
             }
             Spacer()
-            Badge(text: request.risk.label, tint: request.risk.color)
+            Badge(text: request.risk.displayName, tint: request.risk.color)
         }
     }
 
@@ -49,7 +52,9 @@ struct PermissionView: View {
                 }
                 .padding(.bottom, 4)
             }
-            ForEach(request.diff) { line in
+            // Lines arrive one after another rather than all at once, so the moment a
+            // diff lands is legible instead of a block of text appearing from nowhere.
+            ForEach(Array(request.diff.enumerated()), id: \.element.id) { index, line in
                 HStack(spacing: 6) {
                     Text(line.sign).font(Theme.micro).foregroundStyle(line.color).frame(width: 8)
                     Text(line.text)
@@ -60,10 +65,14 @@ struct PermissionView: View {
                 }
                 .padding(.horizontal, 4).padding(.vertical, 1)
                 .background(line.background)
+                .opacity(diffRevealed ? 1 : 0)
+                .offset(x: diffRevealed ? 0 : -4)
+                .animation(Theme.Motion.quick.delay(Double(index) * 0.015), value: diffRevealed)
             }
         }
         .padding(6)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.35)))
+        .onAppear { diffRevealed = true }
     }
 
     private func commandView(_ cmd: String) -> some View {
@@ -77,13 +86,13 @@ struct PermissionView: View {
 
     private var buttons: some View {
         HStack(spacing: 8) {
-            NotchButton(title: "Deny", tint: Theme.textDim, filled: false) {
+            NotchButton(title: L(.deny), tint: Theme.textDim, filled: false) {
                 resolve(.deny)
             }
-            NotchButton(title: "Allow Once", tint: Theme.text, filled: true) {
+            NotchButton(title: L(.allowOnce), tint: Theme.text, filled: true) {
                 resolve(.allowOnce)
             }
-            NotchButton(title: "Always Allow", tint: Theme.green, filled: false) {
+            NotchButton(title: L(.alwaysAllow), tint: Theme.green, filled: false) {
                 resolve(.alwaysAllow)
             }
         }
@@ -92,7 +101,7 @@ struct PermissionView: View {
     private func resolve(_ decision: PermissionDecision) {
         // Routed to the coordinator, which sends the decision back to the hook and
         // resumes the blocked Claude Code tool call.
-        withAnimation(Theme.quickSpring) {
+        withAnimation(Theme.Motion.quick) {
             store.onPermissionDecision?(session.id, decision)
         }
     }
