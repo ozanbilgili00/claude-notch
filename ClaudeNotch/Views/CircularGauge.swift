@@ -14,17 +14,12 @@ struct CircularGauge: View {
     var body: some View {
         VStack(spacing: 4) {
             ZStack {
-                Circle()
-                    .stroke(Theme.stroke, lineWidth: 5)
-                Circle()
-                    .trim(from: 0, to: clamped)
-                    .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(Theme.Motion.quick, value: clamped)
+                ProgressArc(progress: clamped, tint: tint, lineWidth: 5)
                 Text(L10n.percent(Int(clamped * 100), Localization.shared.language))
                     .font(Theme.mono(12, .semibold))
                     .foregroundStyle(Theme.text)
-                    .contentTransition(.numericText())
+                    .contentTransition(.numericText(value: clamped))
+                    .animation(Theme.Motion.value, value: Int(clamped * 100))
             }
             .frame(width: size, height: size)
 
@@ -52,6 +47,9 @@ struct UsageDashboardView: View {
                                   caption: usage.opusResetsIn, tint: tint(opus))
                 }
             }
+            if usage.weekTokens > 0 {
+                tokenTotals
+            }
             if let used = usage.extraCreditsUsed {
                 extraCredits(used: used, limit: usage.extraCreditsLimit)
             }
@@ -60,6 +58,18 @@ struct UsageDashboardView: View {
                     .font(Theme.micro).foregroundStyle(Theme.dim)
             }
         }
+    }
+
+    /// Fresh input + output across every session, from `TokenLedger`.
+    private var tokenTotals: some View {
+        HStack(spacing: 10) {
+            Text(L(.usageToday, Lcompact(usage.todayTokens)))
+                .contentTransition(.numericText(value: Double(usage.todayTokens)))
+            Text(L(.usageThisWeek, Lcompact(usage.weekTokens)))
+                .contentTransition(.numericText(value: Double(usage.weekTokens)))
+        }
+        .font(Theme.micro).foregroundStyle(Theme.textDim)
+        .animation(Theme.Motion.value, value: usage.weekTokens)
     }
 
     /// Pay-as-you-go credits, shown only when the account has them enabled.

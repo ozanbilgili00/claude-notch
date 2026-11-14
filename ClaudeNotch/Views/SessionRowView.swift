@@ -8,6 +8,8 @@ struct SessionRowView: View {
     let session: Session
     /// Keyboard highlight (arrow keys), separate from pointer hover.
     var highlighted: Bool = false
+    /// Shared with the focused view, so the name and the critter fly into its header.
+    var morph: Namespace.ID? = nil
     @State private var hovering = false
     @AppStorage("compactMode") private var compactMode = false
 
@@ -97,10 +99,14 @@ struct SessionRowView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(spacing: 3) {
-                PixelCreature(art: .claude,
+                PixelCreature(art: session.creatureArt,
                               tint: session.status.creatureTint,
                               height: 20,
-                              motion: .forStatus(session.status, activity: session.activity))
+                              motion: .forStatus(session.status, activity: session.activity),
+                          pace: PixelCreature.pace(for: session.activity, working: 1),
+                          event: store.event(for: session.id),
+                          activity: session.activity)
+                    .morphing("critter-\(session.id)", in: morph)
                 statusGlyph
             }
             .frame(width: 26)
@@ -110,6 +116,7 @@ struct SessionRowView: View {
                 Text(session.displayName)
                     .font(Theme.title)
                     .lineLimit(1)
+                    .morphing("title-\(session.id)", in: morph)
                 // Compact mode keeps the title and drops the supporting lines.
                 if !compactMode {
                     Text(session.locationLine)
@@ -127,17 +134,32 @@ struct SessionRowView: View {
 
             VStack(alignment: .trailing, spacing: 4) {
                 HStack(spacing: 4) {
-                    Badge(text: "Claude", tint: Color.forToken("claude"))
-                    Badge(text: session.modelDisplay, tint: Theme.textDim)
+                    AgentBadges(session: session)
+                    if !session.subagents.isEmpty {
+                        Badge(text: "⧉ " + Lcount(.subagentOne, .subagentMany, session.subagents.count),
+                              tint: Theme.violet)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                    if !session.modelDisplay.isEmpty {
+                        Badge(text: session.modelDisplay, tint: Theme.textDim)
+                    }
                     if let t = session.terminalApp {
                         Badge(text: t, tint: Theme.textDim)
                     }
                 }
                 // Driven by the system clock, not by a redraw: the old computed string
                 // only updated when something else in the row changed, so it sat frozen.
-                Text(session.startedAt, style: .timer)
-                    .font(Theme.micro).foregroundStyle(Theme.dim)
-                    .monospacedDigit()
+                HStack(spacing: 6) {
+                    if session.tokens.main > 0 {
+                        Text(L(.tokensShort, Lcompact(session.tokens.main)))
+                            .contentTransition(.numericText(value: Double(session.tokens.main)))
+                            .animation(Theme.Motion.value, value: session.tokens.main)
+                            .help(tokenDetail)
+                    }
+                    Text(session.startedAt, style: .timer)
+                        .monospacedDigit()
+                }
+                .font(Theme.micro).foregroundStyle(Theme.dim)
             }
         }
     }
@@ -177,4 +199,45 @@ struct SessionRowView: View {
         .animation(Theme.Motion.value, value: session.filesAdded)
         .animation(Theme.Motion.value, value: session.filesRemoved)
     }
+}
+
+extension SessionRowView {
+    /// Tooltip splitting the headline token figure into its parts.
+    var tokenDetail: String {
+        let t = session.tokens
+        return L(.tokenDetail, Lcompact(t.input), Lcompact(t.output), Lcompact(t.cache))
+    }
+}
+
+extension View {
+    /// `matchedGeometryEffect` when a namespace is supplied, nothing otherwise — the row
+    /// is also drawn in places with no focused view to fly to.
+    @ViewBuilder
+    func morphing(_ id: String, in ns: Namespace.ID?) -> some View {
+        if let ns { matchedGeometryEffect(id: id, in: ns) } else { self }
+    }
+}
+
+/// Which agent runs the session — and, for Gemini work Claude handed over through
+/// gemini-mcp, a "from Claude" chip so it isn't mistaken for a terminal you opened.
+struct AgentBadges: View {
+    let session: Session
+
+    var body: some View {
+        switch session.agent {
+        case .claude:
+            Badge(text: "Claude", tint: Color.forToken("claude"))
+        case .gemini:
+            Badge(text: "Gemini", tint: Theme.blue)
+            if session.delegatedJob != nil {
+                Badge(text: L(.delegatedBadge), tint: Color.forToken("claude"))
+                    .help(L(.delegatedHelp))
+            }
+        }
+    }
+}
+
+extension Session {
+    /// The pixel creature standing in for this session's agent.
+    var creatureArt: PixelCreature.Art { agent == .gemini ? .gemini : .claude }
 }

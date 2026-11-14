@@ -15,6 +15,8 @@ enum NotificationService {
         case needsAttention     // permission request or question waiting
         case completed          // task finished successfully
         case failed             // task finished with an error
+        case usageWarning       // a usage window crossed 80 % / 95 %
+        case usageReset         // a window that had been tight started over
 
         /// A built-in macOS alert sound; distinct per kind so they're tellable apart.
         var soundName: String {
@@ -22,6 +24,8 @@ enum NotificationService {
             case .needsAttention: return "Funk"
             case .completed:      return "Glass"
             case .failed:         return "Basso"
+            case .usageWarning:   return "Submarine"
+            case .usageReset:     return "Hero"
             }
         }
     }
@@ -50,5 +54,34 @@ enum NotificationService {
         let request = UNNotificationRequest(identifier: UUID().uuidString,
                                             content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Usage alerts belong to no session, so they are titled by the window instead.
+    static func notifyUsage(_ alert: UsageAlerts.Alert) {
+        let window: String
+        switch alert.window {
+        case .fiveHour: window = L(.usageFiveHourLong)
+        case .weekly:   window = L(.usageWeeklyLong)
+        case .opus:     window = L(.usageOpusLong)
+        }
+        switch alert.kind {
+        case .threshold(let pct):
+            post(.usageWarning,
+                 title: L(.usageAlertTitle, window, L10n.percent(pct, Localization.shared.language)),
+                 body: L(.usageAlertBody, UsageSnapshot.countdown(until: alert.resetsAt)))
+        case .reset:
+            post(.usageReset, title: L(.usageResetTitle, window), body: L(.usageResetBody))
+        }
+    }
+
+    private static func post(_ kind: Kind, title: String, body: String) {
+        guard !UserDefaults.standard.muteSounds else { return }
+        NSSound(named: kind.soundName)?.play()
+        guard UserDefaults.standard.notificationsEnabled, authorized else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 }

@@ -46,7 +46,11 @@ final class NotchViewModel {
 
     /// Footprint the window always occupies, whatever the presentation.
     var windowFootprint: CGSize {
-        CGSize(width: expandedSize.width, height: expandedSize.height + Self.bloomMargin)
+        // Wider than the panel by one concave fillet on each side: the silhouette's top
+        // edge spills that far past the body, and a window sized to the body alone would
+        // clip the fillets off.
+        CGSize(width: expandedSize.width + 2 * Theme.panelFlare,
+               height: expandedSize.height + Self.bloomMargin)
     }
 
     // MARK: Transitions

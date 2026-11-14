@@ -86,13 +86,13 @@ struct PermissionView: View {
 
     private var buttons: some View {
         HStack(spacing: 8) {
-            NotchButton(title: L(.deny), tint: Theme.textDim, filled: false) {
+            NotchButton(title: L(.deny), tint: Theme.textDim, filled: false, hint: "⌥N") {
                 resolve(.deny)
             }
-            NotchButton(title: L(.allowOnce), tint: Theme.text, filled: true) {
+            NotchButton(title: L(.allowOnce), tint: Theme.text, filled: true, hint: "⌥Y") {
                 resolve(.allowOnce)
             }
-            NotchButton(title: L(.alwaysAllow), tint: Theme.green, filled: false) {
+            NotchButton(title: L(.alwaysAllow), tint: Theme.green, filled: false, hint: "⌥⇧Y") {
                 resolve(.alwaysAllow)
             }
         }
@@ -112,14 +112,21 @@ struct NotchButton: View {
     let title: String
     var tint: Color = Theme.text
     var filled: Bool = false
+    /// Keyboard shortcut shown faintly after the title, e.g. "⌥Y".
+    var hint: String? = nil
     let action: () -> Void
 
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(Theme.caption.weight(.medium))
+            HStack(spacing: 5) {
+                Text(title)
+                    .font(Theme.caption.weight(.medium))
+                if let hint {
+                    Text(hint).font(Theme.micro).opacity(0.55)
+                }
+            }
                 .foregroundStyle(filled ? Color.black : tint)
                 .padding(.horizontal, 12).padding(.vertical, 6)
                 .frame(maxWidth: .infinity)

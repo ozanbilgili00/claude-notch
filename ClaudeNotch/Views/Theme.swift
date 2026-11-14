@@ -32,7 +32,8 @@ enum Theme {
 
     // MARK: Metrics
     static let notchCorner: CGFloat = 12      // physical notch bottom corners
-    static let panelCorner: CGFloat = 22      // expanded panel corners
+    static let panelCorner: CGFloat = 26      // expanded panel bottom corners
+    static let panelFlare: CGFloat = 22       // concave fillets where the panel meets the top edge
     static let rowCorner: CGFloat = 10
 
     // MARK: Motion
@@ -67,6 +68,28 @@ enum Theme {
         /// For value read-outs: snappy, no bounce, so numbers stay legible mid-flight.
         static var value: Animation {
             reduced ? .linear(duration: 0.01) : .snappy(duration: 0.28)
+        }
+
+        /// A ring filling from empty when it first appears: slow enough to read as a
+        /// measurement being taken, with no overshoot past the real value.
+        static var fill: Animation {
+            reduced ? .linear(duration: 0.01) : .spring(response: 0.9, dampingFraction: 0.9)
+        }
+        /// One-off emphasis on something that just changed (a badge, a glyph).
+        static var pop: Animation {
+            reduced ? .easeOut(duration: 0.12) : .spring(response: 0.3, dampingFraction: 0.55)
+        }
+        /// The creature's hop and other small celebrations: bouncy on purpose.
+        static var celebrate: Animation {
+            reduced ? .easeOut(duration: 0.12) : .spring(response: 0.34, dampingFraction: 0.45)
+        }
+        /// A shape bumping outwards to ask for attention, then settling straight back.
+        static var nudge: Animation {
+            reduced ? .easeOut(duration: 0.12) : .spring(response: 0.22, dampingFraction: 0.42)
+        }
+        /// The tab highlight sliding between tabs.
+        static var tabSlide: Animation {
+            reduced ? .easeOut(duration: 0.12) : .spring(response: 0.36, dampingFraction: 0.84)
         }
 
         /// Delay between successive rows in a staggered reveal.

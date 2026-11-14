@@ -6,6 +6,12 @@ import SwiftUI
 struct NotchRootView: View {
     @Bindable var store: SessionStore
     @Bindable var model: NotchViewModel
+    @Bindable var spotify: SpotifyService
+    @Bindable var lyrics: LyricsService
+    @Bindable var artwork: ArtworkLoader
+    @Bindable var shelf: ShelfStore
+    @Bindable var web: SpotifyWebAPI
+    @Bindable var audio: AudioService
 
     @Namespace private var ns
 
@@ -59,41 +65,43 @@ struct NotchRootView: View {
         contentStack
             .frame(width: model.currentSize.width,
                    height: model.currentSize.height, alignment: .top)
+            // The silhouette is wider than the body by one fillet on each side, so the
+            // clip and the fill both need that extra width to draw into.
+            .frame(width: model.currentSize.width + 2 * flare, alignment: .center)
+            // The sweep sits inside the clip, so the light runs along the pill's own outline.
+            .overlay {
+                if isClosed { EventSweep(event: store.event) }
+            }
             .clipShape(bodyShape)
             .background {
                 bodyShape
                     .fill(Color.black)
-                    .overlay { bodyDecoration }
-                    // No drop shadow: against a dark desktop the wide soft one reads as a
-                    // grey smudge under the panel rather than depth. The specular top
-                    // edge and the body gradient carry the depth instead.
+                    // Nothing is painted over the fill. No drop shadow either: against a
+                    // dark desktop the wide soft one reads as a grey smudge under the
+                    // panel rather than depth.
             }
             .geometryGroup()
+            .eventNudge(isClosed ? store.event : nil)
     }
 
     private var bodyShape: NotchBackgroundShape {
         NotchBackgroundShape(bottomCorner: isClosed ? Theme.notchCorner : Theme.panelCorner,
-                             topCorner: isClosed ? 0 : Theme.panelCorner)
+                             topFlare: flare)
     }
 
-    /// Pure black while closed so the pill fuses with the physical notch; once it is a
-    /// floating panel it can afford a whisper of gradient, a specular top edge and grain.
-    @ViewBuilder
-    private var bodyDecoration: some View {
-        if !isClosed {
-            ZStack {
-                LinearGradient(colors: [Color(white: 0.055), Color(white: 0.012)],
-                               startPoint: .top, endPoint: .bottom)
-                GrainOverlay()
-                VStack(spacing: 0) {
-                    Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
-                    Spacer(minLength: 0)
-                }
-            }
-            .clipShape(bodyShape)
-            .overlay { bodyShape.strokeBorder(Theme.stroke, lineWidth: 1) }
-        }
-    }
+    /// The pill has no fillets: it is already the width of the notch housing, and flaring
+    /// it would put black on the menu bar to either side of the camera.
+    private var flare: CGFloat { isClosed ? 0 : Theme.panelFlare }
+
+    // The panel stays pure black in both states — the body is filled with `Color.black`
+    // and nothing is painted over it.
+    //
+    // It used to carry a faint top-to-bottom gradient and a grain overlay, which lifted the
+    // surface to about 5% grey. Those went first. The edge treatment that replaced them — a
+    // one-pixel white specular highlight along the top plus a hairline border around the
+    // body — is gone too: sitting directly under the menu bar, the highlight and the border
+    // stacked into a visible grey line across the top edge. The panel now has no edge
+    // treatment at all, which is what makes it read as black rather than as a dark object.
 
     /// Both states share one stack so the crossfade can overlap. The closed pill stays
     /// mounted (it is tiny); the panel is only built while it is on screen, so a closed
@@ -101,6 +109,8 @@ struct NotchRootView: View {
     private var contentStack: some View {
         ZStack(alignment: .top) {
             ClosedStateView(store: store,
+                            spotify: spotify,
+                            artwork: artwork,
                             isRealNotch: model.notch.isReal,
                             notchWidth: model.notch.notchSize.width,
                             ns: ns,
@@ -111,26 +121,47 @@ struct NotchRootView: View {
                 .allowsHitTesting(isClosed)
 
             if !isClosed {
-                ExpandedView(store: store, model: model, ns: ns)
+                ExpandedView(store: store, spotify: spotify,
+                             lyrics: lyrics, artwork: artwork, shelf: shelf,
+                             web: web, audio: audio, ns: ns,
+                             headerGap: model.notch.notchSize.width,
+                             holdOpen: { hold in
+                                 if hold { model.forceOpen() } else { model.unlockAndMaybeCollapse() }
+                             },
+                             close: { model.collapse(force: true) })
                     .frame(width: model.expandedSize.width, height: model.expandedSize.height)
-                    .transition(.opacity.animation(
-                        .easeOut(duration: 0.22)
-                            .delay(Theme.Motion.reduced ? 0 : Theme.Motion.crossfade)))
+                    .transition(.asymmetric(
+                        insertion: .opacity.animation(
+                            .easeOut(duration: 0.22)
+                                .delay(Theme.Motion.reduced ? 0 : Theme.Motion.crossfade)),
+                        removal: .modifier(active: CloseAway(progress: 1),
+                                           identity: CloseAway(progress: 0))
+                            .animation(.easeIn(duration: 0.16))))
             }
         }
     }
 }
 
-/// Rounded-bottom (and optionally rounded-top) shape for the notch/panel body.
-/// The corner radii are animatable so opening doesn't snap 12pt → 22pt in one frame.
+/// The notch/panel silhouette: a straight top edge that runs the full width, concave
+/// fillets where that edge turns down into the sides, and rounded bottom corners.
+///
+/// The top corners curve the *other way* on purpose. A panel with convex top corners reads
+/// as a card that happens to be near the top of the screen; concave ones read as a shape
+/// hanging off the menu bar, which is what the notch is. Each fillet is a quarter circle
+/// tangent to the top edge at one end and to the side at the other, so there is no visible
+/// join at either.
+///
+/// Both radii are animatable, so opening does not snap the silhouette in a single frame.
 struct NotchBackgroundShape: InsettableShape {
     var bottomCorner: CGFloat
-    var topCorner: CGFloat
+    /// Radius of the concave top fillets — and how far the shape spills sideways past the
+    /// body, since the top edge is that much wider than the panel below it.
+    var topFlare: CGFloat
     var inset: CGFloat = 0
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(bottomCorner, topCorner) }
-        set { bottomCorner = newValue.first; topCorner = newValue.second }
+        get { AnimatablePair(bottomCorner, topFlare) }
+        set { bottomCorner = newValue.first; topFlare = newValue.second }
     }
 
     func inset(by amount: CGFloat) -> some InsettableShape {
@@ -140,31 +171,33 @@ struct NotchBackgroundShape: InsettableShape {
     func path(in rect: CGRect) -> Path {
         let r = rect.insetBy(dx: inset, dy: inset)
         guard r.width > 0, r.height > 0 else { return Path() }
-        let maxCorner = min(r.width, r.height) / 2
-        let tc = max(0, min(topCorner, maxCorner))
-        let bc = max(0, min(bottomCorner, maxCorner))
+        let flare = max(0, min(topFlare, r.width / 2))
+        let bc = max(0, min(bottomCorner, min(r.width / 2 - flare, r.height / 2)))
 
         var p = Path()
-        p.move(to: CGPoint(x: r.minX + tc, y: r.minY))
-        p.addLine(to: CGPoint(x: r.maxX - tc, y: r.minY))
-        if tc > 0 {
-            p.addQuadCurve(to: CGPoint(x: r.maxX, y: r.minY + tc),
-                           control: CGPoint(x: r.maxX, y: r.minY))
+        p.move(to: CGPoint(x: r.minX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        if flare > 0 {
+            // Centre on the outer edge, level with the bottom of the fillet: that puts the
+            // arc tangent to the horizontal where it leaves the top edge and tangent to the
+            // vertical where it meets the side.
+            p.addArc(center: CGPoint(x: r.maxX, y: r.minY + flare), radius: flare,
+                     startAngle: .degrees(-90), endAngle: .degrees(180), clockwise: true)
         }
-        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - bc))
+        p.addLine(to: CGPoint(x: r.maxX - flare, y: r.maxY - bc))
         if bc > 0 {
-            p.addQuadCurve(to: CGPoint(x: r.maxX - bc, y: r.maxY),
-                           control: CGPoint(x: r.maxX, y: r.maxY))
+            p.addQuadCurve(to: CGPoint(x: r.maxX - flare - bc, y: r.maxY),
+                           control: CGPoint(x: r.maxX - flare, y: r.maxY))
         }
-        p.addLine(to: CGPoint(x: r.minX + bc, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX + flare + bc, y: r.maxY))
         if bc > 0 {
-            p.addQuadCurve(to: CGPoint(x: r.minX, y: r.maxY - bc),
-                           control: CGPoint(x: r.minX, y: r.maxY))
+            p.addQuadCurve(to: CGPoint(x: r.minX + flare, y: r.maxY - bc),
+                           control: CGPoint(x: r.minX + flare, y: r.maxY))
         }
-        p.addLine(to: CGPoint(x: r.minX, y: r.minY + tc))
-        if tc > 0 {
-            p.addQuadCurve(to: CGPoint(x: r.minX + tc, y: r.minY),
-                           control: CGPoint(x: r.minX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.minX + flare, y: r.minY + flare))
+        if flare > 0 {
+            p.addArc(center: CGPoint(x: r.minX, y: r.minY + flare), radius: flare,
+                     startAngle: .degrees(0), endAngle: .degrees(-90), clockwise: true)
         }
         p.closeSubpath()
         return p

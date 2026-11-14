@@ -9,6 +9,20 @@ final class SessionStore {
     var sessions: [Session] = []
     var usage: UsageSnapshot = .empty
 
+    /// The latest moment worth reacting to — a turn finishing, something needing the
+    /// user, a usage warning. Views animate on `event.id` changing; nothing reads it as
+    /// state, so it never needs clearing.
+    var event: NotchEvent?
+
+    func signal(_ kind: NotchEvent.Kind, session: String? = nil) {
+        event = NotchEvent(kind: kind, sessionID: session)
+    }
+
+    /// The current event if it belongs to this session — for a row's own creature.
+    func event(for sessionID: String) -> NotchEvent? {
+        event?.sessionID == sessionID ? event : nil
+    }
+
     /// Selected session in the expanded UI (defaults to the most urgent).
     var selectedID: String?
 
@@ -38,6 +52,16 @@ final class SessionStore {
     }
 
     var workingCount: Int { sessions.filter { $0.status == .working }.count }
+
+    /// The most recent turn result still worth announcing. Successful ones clear themselves
+    /// a few seconds after the turn ends (see `HookCoordinator`), failures stay until they
+    /// are dismissed — so the presence of one is exactly "something just finished".
+    var recentCompletion: Completion? {
+        sessions
+            .filter { $0.completion != nil }
+            .max { $0.lastActivityAt < $1.lastActivityAt }?
+            .completion
+    }
 
     /// One-word summary of everything, shared by the closed pill and the panel header so
     /// the two never disagree mid-morph.
@@ -78,4 +102,13 @@ final class SessionStore {
     func session(_ id: String) -> Session? {
         sessions.first { $0.id == id }
     }
+}
+
+/// A one-off happening for the closed notch and the edge dock to acknowledge.
+struct NotchEvent: Equatable, Identifiable {
+    enum Kind: Equatable { case completed, attention, failed, usageWarning, usageReset }
+    let id = UUID()
+    var kind: Kind
+    /// The session it happened in, when it happened in one.
+    var sessionID: String? = nil
 }

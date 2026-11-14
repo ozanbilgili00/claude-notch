@@ -59,6 +59,12 @@ func L(_ key: L10n.Key, _ args: CVarArg...) -> String {
     String(format: L10n.string(key, Localization.shared.language), arguments: args)
 }
 
+/// A token count in the current language's number style.
+@MainActor
+func Lcompact(_ n: Int) -> String {
+    L10n.compact(n, Localization.shared.language)
+}
+
 /// English pluralises after a numeral and Turkish does not ("3 sessions" / "3 oturum"),
 /// so count-dependent strings carry both forms rather than going through a plural engine —
 /// there are only three such strings in the app.

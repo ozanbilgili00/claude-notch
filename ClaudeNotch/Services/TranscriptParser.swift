@@ -4,7 +4,8 @@ import Foundation
 struct TranscriptEvent {
     var model: String?
     var branch: String?
-    var addedTokens: Int = 0
+    var usage: TokenCounts?       // this line's API usage; repeats across a reply's lines
+    var messageID: String?        // the API message the line belongs to, for de-duplication
     var logLine: String?
     var userPrompt: String?       // a real user prompt, trimmed to one line for headers
     var userPromptFull: String?   // the same prompt with its full text, for the conversation
@@ -42,9 +43,14 @@ enum TranscriptParser {
         }
 
         if type == "assistant", let message {
-            event.model = message["model"] as? String
+            // Claude Code stamps its own locally made messages "<synthetic>"; that is
+            // not a model and must not replace the real one on the badge.
+            if let model = message["model"] as? String, !model.hasPrefix("<") {
+                event.model = model
+            }
+            event.messageID = message["id"] as? String
             if let usage = message["usage"] as? [String: Any] {
-                event.addedTokens = tokenCount(usage)
+                event.usage = TokenCounts(usage: usage)
             }
             event.logLine = assistantLog(message)
             event.assistantText = assistantProse(message)
@@ -58,13 +64,6 @@ enum TranscriptParser {
             }
         }
         return event
-    }
-
-    /// Total tokens attributable to one assistant message (input + output + cache).
-    private static func tokenCount(_ usage: [String: Any]) -> Int {
-        func int(_ key: String) -> Int { (usage[key] as? Int) ?? 0 }
-        return int("input_tokens") + int("output_tokens")
-            + int("cache_creation_input_tokens") + int("cache_read_input_tokens")
     }
 
     /// A concise one-line preview of an assistant message (tool call or first text).

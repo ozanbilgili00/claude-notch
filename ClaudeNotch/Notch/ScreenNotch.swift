@@ -10,14 +10,6 @@ struct ScreenNotch {
     /// True when the display actually has a hardware notch.
     let isReal: Bool
 
-    /// The screen that currently hosts the menu bar / notch — where we want to live.
-    static func primary() -> ScreenNotch {
-        // Prefer a screen that reports a top safe-area inset (the notched one).
-        let notched = NSScreen.screens.first { $0.safeAreaInsets.top > 0 }
-        let screen = notched ?? NSScreen.main ?? NSScreen.screens.first!
-        return resolve(for: screen)
-    }
-
     static func resolve(for screen: NSScreen) -> ScreenNotch {
         let topInset = screen.safeAreaInsets.top
         if topInset > 0 {

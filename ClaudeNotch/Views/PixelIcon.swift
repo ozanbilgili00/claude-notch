@@ -76,7 +76,7 @@ struct WorkingBars: View {
         case .running, .shell:      return 0.55
         case .searching, .reading:  return 0.75
         case .editing:              return 0.9
-        case .planning:             return 1.7
+        case .planning, .compacting: return 1.7
         case .waiting, .idle:       return 2.2
         }
     }

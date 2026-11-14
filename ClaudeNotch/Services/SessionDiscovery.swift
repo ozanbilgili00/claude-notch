@@ -83,7 +83,7 @@ enum SessionDiscovery {
     /// Which terminal hosts this process: walk up the parent chain until a known
     /// terminal turns up. `claude` usually sits under a shell, which sits under the
     /// terminal, so a couple of hops is normal.
-    private static func terminalApp(of pid: Int32) -> String? {
+    static func terminalApp(of pid: Int32) -> String? {
         var current = pid
         for _ in 0..<8 {
             let out = shell("/bin/ps", ["-o", "ppid=,comm=", "-p", "\(current)"])
@@ -105,14 +105,14 @@ enum SessionDiscovery {
     }
 
     /// The controlling terminal of a process, e.g. "/dev/ttys003".
-    private static func tty(of pid: Int32) -> String? {
+    static func tty(of pid: Int32) -> String? {
         let out = shell("/bin/ps", ["-o", "tty=", "-p", "\(pid)"])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !out.isEmpty, out != "??" else { return nil }
         return out.hasPrefix("/dev/") ? out : "/dev/\(out)"
     }
 
-    private static func workingDirectory(of pid: Int32) -> String? {
+    static func workingDirectory(of pid: Int32) -> String? {
         let out = shell("/usr/sbin/lsof", ["-a", "-p", "\(pid)", "-d", "cwd", "-Fn"])
         for line in out.split(whereSeparator: \.isNewline) where line.hasPrefix("n") {
             return String(line.dropFirst())
@@ -156,7 +156,7 @@ enum SessionDiscovery {
 
     // MARK: Shell
 
-    private static func shell(_ launchPath: String, _ args: [String]) -> String {
+    static func shell(_ launchPath: String, _ args: [String]) -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: launchPath)
         process.arguments = args

@@ -9,6 +9,7 @@ enum ActivityKind: String, Codable {
     case searching    // Grep / Glob / Read exploration
     case reading      // reading files
     case waiting      // waiting on approval / question
+    case compacting   // Claude Code is summarising the conversation to free context
     case idle
 
     /// Maps a Claude Code tool name to an activity.
@@ -46,6 +47,7 @@ enum ActivityKind: String, Codable {
         case .searching: return "magnifyingglass"
         case .reading:   return "doc.text"
         case .waiting:   return "hourglass"
+        case .compacting: return "rectangle.compress.vertical"
         case .idle:      return "moon.zzz"
         }
     }
@@ -59,6 +61,7 @@ enum ActivityKind: String, Codable {
         case .searching: return L(.activitySearching)
         case .reading:   return L(.activityReading)
         case .waiting:   return L(.activityWaiting)
+        case .compacting: return L(.activityCompacting)
         case .idle:      return L(.activityIdle)
         }
     }

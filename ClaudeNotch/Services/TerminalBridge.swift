@@ -35,7 +35,7 @@ enum TerminalBridge {
         let dialects: [Dialect] = Dialect.to(app).map { [$0] } ?? [.terminalApp, .iTerm2]
         if let tty {
             for dialect in dialects
-            where runAppleScript(script(dialect, tty: tty, prompt: nil)) == "ok" {
+            where AppleScriptRunner.run(script(dialect, tty: tty, prompt: nil)) == "ok" {
                 return true
             }
         }
@@ -53,7 +53,7 @@ enum TerminalBridge {
         let dialects: [Dialect] = Dialect.to(app).map { [$0] } ?? [.terminalApp, .iTerm2]
         if let tty {
             for dialect in dialects
-            where runAppleScript(script(dialect, tty: tty, prompt: text)) == "ok" {
+            where AppleScriptRunner.run(script(dialect, tty: tty, prompt: text)) == "ok" {
                 return .sent
             }
         }
@@ -131,23 +131,6 @@ enum TerminalBridge {
             return "notfound"
             """
         }
-    }
-
-    /// Runs an AppleScript source and returns its trimmed string result (or nil on error).
-    /// Uses osascript so the one-time Automation consent is attributed to this app.
-    @discardableResult
-    private static func runAppleScript(_ source: String) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", source]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        guard (try? process.run()) != nil else { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func openTerminal(cwd: String) {

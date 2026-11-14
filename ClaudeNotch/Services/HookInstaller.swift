@@ -10,6 +10,7 @@ enum HookInstaller {
         "SessionStart", "SessionEnd", "UserPromptSubmit",
         "PreToolUse", "PostToolUse", "PostToolUseFailure",
         "Notification", "Stop", "StopFailure",
+        "SubagentStart", "SubagentStop", "PreCompact", "PostCompact",
     ]
 
     private static let toolEvents: Set<String> = ["PreToolUse", "PostToolUse", "PostToolUseFailure"]
@@ -45,13 +46,28 @@ enum HookInstaller {
         /// Hooks reference a different build. `exists` is false once it's been deleted —
         /// the usual end state of an Xcode DerivedData build.
         case pointsElsewhere(path: String, exists: Bool)
+        /// Installed and pointing here, but registered before these events were added
+        /// (e.g. SubagentStart) — the notch silently misses them until reinstalled.
+        case outdated(missing: [String])
     }
 
     static func health() -> Health {
         guard let installed = installedBinaryPath() else { return .notInstalled }
-        if installed == AppInfo.executablePath { return .ok }
+        if installed == AppInfo.executablePath {
+            let missing = missingEvents()
+            return missing.isEmpty ? .ok : .outdated(missing: missing)
+        }
         return .pointsElsewhere(path: installed,
                                 exists: FileManager.default.isExecutableFile(atPath: installed))
+    }
+
+    /// Events we register that settings.json has no entry of ours for.
+    static func missingEvents() -> [String] {
+        let hooks = (readSettings()?["hooks"] as? [String: Any]) ?? [:]
+        return events.filter { event in
+            let arr = (hooks[event] as? [[String: Any]]) ?? []
+            return !arr.contains { entry in commandsIn(entry).contains { $0.contains(marker) } }
+        }
     }
 
     /// The binary path our hook entries currently invoke, if any.

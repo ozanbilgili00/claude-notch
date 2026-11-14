@@ -22,7 +22,35 @@ enum MockData {
 
     static let sessions: [Session] = [
         {
-            var s = Session.empty(id: "s1", cwd: "/Users/ozan/dev/agent-runtime")
+            var s = Session.empty(id: "s4", cwd: "/Users/dev/projects/atlas")
+            s.projectName = "atlas"
+            s.title = "Find the flaky cache test"
+            s.tty = "/dev/ttys006"
+            s.task = "Why does CacheTests fail on CI only?"
+            s.status = .working
+            s.activity = .searching
+            s.activityDetail = "Grep CacheTests"
+            s.currentTool = "Grep"
+            s.model = "claude-sonnet-5"
+            s.terminalApp = "Terminal"
+            s.startedAt = Date().addingTimeInterval(-90)
+            return s
+        }(),
+        {
+            var s = Session.empty(id: "s5", cwd: "/Users/dev/projects/notes")
+            s.projectName = "notes"
+            s.title = "Plan the sync layer"
+            s.tty = "/dev/ttys007"
+            s.task = "Sketch a plan for offline sync"
+            s.status = .working
+            s.activity = .planning
+            s.model = "claude-fable-5-1"
+            s.terminalApp = "Terminal"
+            s.startedAt = Date().addingTimeInterval(-30)
+            return s
+        }(),
+        {
+            var s = Session.empty(id: "s1", cwd: "/Users/dev/projects/agent-runtime")
             s.projectName = "agent-runtime"
             s.title = "Trace duplicate event dispatches"
             s.tty = "/dev/ttys003"
@@ -35,7 +63,7 @@ enum MockData {
             s.terminalApp = "iTerm2"
             s.branch = "main"
             s.filesAdded = 42; s.filesRemoved = 12
-            s.sessionTokens = 128_400
+            s.tokens = TokenCounts(input: 4_100, output: 124_300, cacheRead: 18_200_000, cacheWrite: 640_000)
             s.startedAt = Date().addingTimeInterval(-16 * 60)
             s.logTail = [
                 "> agent-events@1.0.0 test",
@@ -51,7 +79,7 @@ enum MockData {
             return s
         }(),
         {
-            var s = Session.empty(id: "s2", cwd: "/Users/ozan/dev/desktop-app")
+            var s = Session.empty(id: "s2", cwd: "/Users/dev/projects/desktop-app")
             s.projectName = "desktop-app"
             s.title = "Polish multi-agent session panel"
             s.tty = "/dev/ttys004"
@@ -75,7 +103,7 @@ enum MockData {
             return s
         }(),
         {
-            var s = Session.empty(id: "s3", cwd: "/Users/ozan/dev/vibe-island")
+            var s = Session.empty(id: "s3", cwd: "/Users/dev/projects/vibe-island")
             s.projectName = "vibe-island"
             s.title = "Deterministic terminal routing"
             s.tty = "/dev/ttys005"
@@ -84,7 +112,7 @@ enum MockData {
             s.activity = .editing
             s.activityDetail = "router/session.ts"
             s.currentTool = "Edit"
-            s.model = "claude-opus-4-8"
+            s.model = "claude-opus-5-5"
             s.terminalApp = "Ghostty"
             s.branch = "main"
             s.filesAdded = 8; s.filesRemoved = 3

@@ -9,7 +9,8 @@ import Foundation
 final class HookCoordinator {
     private let store: SessionStore
     private var watchers: [String: TranscriptWatcher] = [:]
-    private let rules = PermissionRules()
+    private var geminiWatchers: [String: GeminiWatcher] = [:]
+    private let rules = PermissionRules.shared
 
     /// Continuations for blocked hooks, keyed by request id (tool_use_id).
     private var responders: [String: CheckedContinuation<[String: Any], Never>] = [:]
@@ -52,6 +53,10 @@ final class HookCoordinator {
              "PostToolUseFailure":      onPostTool(payload, failed: event == "PostToolUseFailure")
         case "Notification":            onNotification(payload)
         case "Stop", "StopFailure":     onStop(payload, failed: event == "StopFailure")
+        case "SubagentStart":           onSubagentStart(payload)
+        case "SubagentStop":            onSubagentStop(payload)
+        case "PreCompact":              onCompact(payload, starting: true)
+        case "PostCompact":             onCompact(payload, starting: false)
         default:                        break
         }
 
@@ -132,7 +137,49 @@ final class HookCoordinator {
             s.activity = .planning
             s.currentTool = nil
             s.completion = nil
+            s.compacting = false
+            s.turnAdded = 0
+            s.turnRemoved = 0
             s.lastActivityAt = Date()
+        }
+    }
+
+    // MARK: Subagents and compaction
+
+    private func onSubagentStart(_ p: [String: Any]) {
+        guard let id = sessionID(p), let agent = p["agent_id"] as? String else { return }
+        let type = p["agent_type"] as? String ?? ""
+        store.update(id) { s in
+            guard !s.subagents.contains(where: { $0.id == agent }) else { return }
+            s.subagents.append(Subagent(id: agent, type: type, startedAt: Date()))
+            s.lastActivityAt = Date()
+        }
+    }
+
+    private func onSubagentStop(_ p: [String: Any]) {
+        guard let id = sessionID(p), let agent = p["agent_id"] as? String else { return }
+        store.update(id) { s in
+            s.subagents.removeAll { $0.id == agent }
+            s.lastActivityAt = Date()
+        }
+    }
+
+    /// PreCompact fires for both `/compact` and auto-compaction mid-turn. A manual one
+    /// happens between turns, so the session reads as working only while it runs; an
+    /// automatic one leaves the turn's own state to carry on afterwards.
+    private func onCompact(_ p: [String: Any], starting: Bool) {
+        guard let id = sessionID(p) else { return }
+        let inTurn = turnStart[id] != nil
+        store.update(id) { s in
+            s.compacting = starting
+            s.lastActivityAt = Date()
+            if starting {
+                s.status = .working
+                s.activity = .compacting
+            } else if s.activity == .compacting {
+                s.activity = inTurn ? .planning : .idle
+                if !inTurn { s.status = .idle }
+            }
         }
     }
 
@@ -190,6 +237,7 @@ final class HookCoordinator {
             s.activity = .waiting
         }
         if let s = store.session(id) {
+            store.signal(.attention, session: id)
             NotificationService.notify(.needsAttention, session: s,
                                        body: L(.notifPermissionNeeded, request.toolName))
         }
@@ -219,6 +267,7 @@ final class HookCoordinator {
             s.activity = .waiting
         }
         if let s = store.session(id) {
+            store.signal(.attention, session: id)
             NotificationService.notify(.needsAttention, session: s, body: question.prompt)
         }
 
@@ -299,9 +348,16 @@ final class HookCoordinator {
 
     private func onPostTool(_ p: [String: Any], failed: Bool) {
         guard let id = sessionID(p) else { return }
+        let tool = p["tool_name"] as? String ?? ""
+        let delta = failed ? LineDelta()
+            : LineDelta.from(tool: tool, input: p["tool_input"] as? [String: Any] ?? [:])
         store.update(id) { s in
             s.lastActivityAt = Date()
             if failed { s.status = .error }
+            s.filesAdded += delta.added
+            s.filesRemoved += delta.removed
+            s.turnAdded += delta.added
+            s.turnRemoved += delta.removed
         }
     }
 
@@ -324,18 +380,27 @@ final class HookCoordinator {
         guard let id = sessionID(p) else { return }
         let start = turnStart[id]
         turnStart[id] = nil
+        completeTurn(id, failed: failed, start: start)
+    }
 
+    /// End a turn: the completion card, the hop, the notification and the daily log.
+    /// Shared by Claude's Stop hook and the end of a Gemini turn in its transcript.
+    private func completeTurn(_ id: String, failed: Bool, start: Date?) {
         store.update(id) { s in
             s.status = failed ? .error : .idle
             s.activity = .idle
             s.currentTool = nil
+            // A turn that ends has no subagents or compaction left, even if a matching
+            // Stop hook never arrived for one of them.
+            s.subagents = []
+            s.compacting = false
             s.lastActivityAt = Date()
 
             let duration = start.map { Date().timeIntervalSince($0) } ?? 0
             s.completion = Completion(
                 duration: duration,
-                filesAdded: s.filesAdded,
-                filesRemoved: s.filesRemoved,
+                filesAdded: s.turnAdded,
+                filesRemoved: s.turnRemoved,
                 testsPassed: testsPassed(from: s.logTail),
                 succeeded: !failed,
                 summary: failed ? (s.activityDetail.isEmpty ? L(.turnEndedWithError) : s.activityDetail)
@@ -343,6 +408,12 @@ final class HookCoordinator {
             )
         }
 
+        store.signal(failed ? .failed : .completed, session: id)
+        if start != nil, let s = store.session(id), let c = s.completion {
+            DailyLog.shared.record(DailyEntry(time: Date(), project: s.projectName, duration: c.duration,
+                                              added: c.filesAdded, removed: c.filesRemoved,
+                                              succeeded: c.succeeded))
+        }
         if let s = store.session(id) {
             NotificationService.notify(failed ? .failed : .completed, session: s,
                                        body: failed ? L(.notifTaskFailed) : L(.notifTaskCompleted))
@@ -373,8 +444,9 @@ final class HookCoordinator {
 
     /// Reconcile the store with the set of currently-running sessions found by
     /// `SessionDiscovery`: add ones we didn't know about, drop ones whose process ended.
-    func applyDiscovered(_ found: [SessionDiscovery.Found]) {
-        let ids = Set(found.map(\.id))
+    func applyDiscovered(_ found: [SessionDiscovery.Found], gemini: [GeminiDiscovery.Found] = []) {
+        let ids = Set(found.map(\.id)).union(gemini.map(\.id))
+        applyGemini(gemini)
 
         for f in found {
             if store.session(f.id) == nil {
@@ -408,8 +480,99 @@ final class HookCoordinator {
             if !blocking && stale {
                 watchers[s.id]?.stop()
                 watchers[s.id] = nil
+                geminiWatchers[s.id]?.stop()
+                geminiWatchers[s.id] = nil
                 store.remove(s.id)
             }
+        }
+    }
+
+    // MARK: Gemini
+
+    /// Sessions of the Antigravity CLI. They have no hooks into the notch: discovery
+    /// finds them, and their transcript drives everything else (see `GeminiWatcher`).
+    private func applyGemini(_ found: [GeminiDiscovery.Found]) {
+        // Switched off in Settings: clear them now rather than waiting for the prune.
+        guard UserDefaults.standard.geminiSessionsEnabled else {
+            for s in store.sessions where s.agent == .gemini {
+                geminiWatchers[s.id]?.stop()
+                geminiWatchers[s.id] = nil
+                store.remove(s.id)
+            }
+            return
+        }
+        for f in found {
+            if store.session(f.id) == nil {
+                var s = Session.empty(id: f.id, cwd: f.cwd)
+                s.agent = .gemini
+                s.delegatedJob = f.job?.id
+                s.transcriptPath = f.transcriptPath
+                s.model = f.job?.model ?? GeminiDiscovery.defaultModel() ?? ""
+                if let task = f.job?.task { s.task = task }
+                s.pid = f.pid
+                s.tty = f.tty
+                s.terminalApp = f.terminalApp
+                store.upsert(s)
+            } else {
+                store.update(f.id) {
+                    $0.pid = f.pid
+                    $0.tty = f.tty
+                    if let app = f.terminalApp { $0.terminalApp = app }
+                }
+            }
+            if let watcher = geminiWatchers[f.id] {
+                watcher.poke()
+            } else {
+                let watcher = GeminiWatcher(sessionID: f.id, path: f.transcriptPath) { [weak self] id, snap, outcomes, live in
+                    self?.applyGemini(id, snap, outcomes: outcomes, live: live)
+                }
+                geminiWatchers[f.id] = watcher
+                watcher.start()
+            }
+        }
+    }
+
+    private func applyGemini(_ id: String, _ snap: GeminiSnapshot,
+                             outcomes: [GeminiTurn.Outcome], live: Bool) {
+        guard let before = store.session(id) else { return }
+        let turn = snap.turn
+        store.update(id) { s in
+            // A delegated job's prompt is wrapped in working rules; the job folder's
+            // task line is the better title, so the transcript only fills a blank.
+            if let task = snap.task, s.delegatedJob == nil || s.task.isEmpty { s.task = task }
+            if let model = snap.model { s.model = model }
+            s.tokens = snap.tokens
+            s.conversation = snap.conversation
+            s.turnAdded = turn.added
+            s.turnRemoved = turn.removed
+            s.currentTool = turn.tool
+            if turn.working {
+                s.status = turn.activity == .waiting ? .waiting : .working
+                s.activity = turn.activity
+                s.activityDetail = turn.detail
+                s.lastActivityAt = Date()
+            } else if s.status == .working || s.status == .waiting {
+                s.status = .idle
+                s.activity = .idle
+            }
+        }
+
+        for outcome in outcomes {
+            switch outcome {
+            case .started:
+                store.update(id) { $0.completion = nil; $0.lastActivityAt = Date() }
+            case .ended(let start, let added, let removed):
+                store.update(id) {
+                    $0.filesAdded += added
+                    $0.filesRemoved += removed
+                }
+                completeTurn(id, failed: false, start: start)
+            }
+        }
+        // Gemini asking a question (`ask_question`) is the one wait the transcript shows.
+        if live, before.status != .waiting, let s = store.session(id), s.status == .waiting {
+            store.signal(.attention, session: id)
+            NotificationService.notify(.needsAttention, session: s, body: L(.notifGeminiQuestion))
         }
     }
 

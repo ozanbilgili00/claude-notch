@@ -58,12 +58,10 @@ enum L10n {
         case noConversation, thisTerminal, terminalNoScriptedInput, terminalUnreachable
         case searchLog, youPrefix
 
-        // Quick settings
-        case sounds, notifications, autoCollapse, hooks, remove, install
-        case allSettings, quitApp
-
-        // Settings window
-        case tabGeneral, tabAbout
+        // Settings (a tab of the panel, not a window)
+        case sounds, notifications, autoCollapse, remove, install
+        case quitApp
+        case tabAbout
         case sectionStartup, launchAtLogin
         case sectionNotch, autoCollapseWhenIdle, compactMode, accentColor, accentNote
         case accentGreen, accentBlue, accentViolet, accentAmber, accentRed
@@ -76,12 +74,76 @@ enum L10n {
         case aboutTagline, sessionsObservedOne, sessionsObservedMany
         case signedBy, signedByNobody
 
-        // Menu bar
-        case openNotch, hooksInstalledMenu, hooksNotInstalledMenu, settingsMenu
-        case workingCountOne, workingCountMany
-
         // System notifications
         case notifPermissionNeeded, notifTaskCompleted, notifTaskFailed
+
+        // Music (Spotify)
+        case tabSessions, tabMusic
+        case musicNothingPlaying, musicLyricsLoading, musicNoLyrics, musicInstrumental
+        case musicSection, musicEnable, musicShowLyrics, musicShowInPill, musicNote
+        case musicVolume, musicShuffle, musicRepeat, musicOpenInSpotify, musicCopied
+
+        // Spotify account (Web API)
+        case spotifyAccountSection, spotifyClientID, spotifyConnect, spotifyDisconnect
+        case spotifyConnecting, spotifyConnected, spotifySignedOut, spotifyNeedsSetup
+        case spotifyExpired, spotifyAccountNote
+        case musicSearchPlaceholder, musicNoResults, musicSearching
+        case tabLyrics, tabQueue, queuePrevious, queueNow, queueNext, queueEmpty
+        case queueSignInNeeded
+
+        // Edge dock (right-hand layout)
+        case layoutSection, layoutNotch, layoutEdge, layoutNote
+        case edgeRingsSection, edgeRingSessions, edgeRingsNote
+        case edgeOpenPanel, edgeUsed, edgeResetsIn, edgeSessionsIdle
+        case edgeSessionsWorkingOne, edgeSessionsWorkingMany
+
+        // Sound mixer
+        case tabSettings
+        case geminiSessionsToggle
+        case notifGeminiQuestion
+        case delegatedBadge
+        case delegatedHelp
+        case screenLabel
+        case screenAutomatic
+        case screenPointer
+        case eventAnimationsToggle
+        case dailyTitle
+        case dailyTurnsOne
+        case dailyTurnsMany
+        case dailyFailedOne
+        case dailyFailedMany
+        case usageAlertTitle
+        case usageAlertBody
+        case usageResetTitle
+        case usageResetBody
+        case usageAlertsToggle
+        case hooksOutdated
+        case hooksUpdate
+        case tokensShort
+        case tokenDetail
+        case usageToday
+        case usageThisWeek
+        case subagentOne
+        case subagentMany
+        case subagentsTitle
+        case activityCompacting
+        case rulesSection
+        case rulesEmpty
+        case rulesAllUses
+        case rulesLegacy
+        case rulesLegacyHint
+        case rulesClearAll
+        case rulesRemove
+        case tabMixer
+        case mixerOutput, mixerInput, mixerApps, mixerNoApps, mixerAppsNote
+        case mixerNoVolumeControl, mixerNoDevice, mixerMute, mixerAppFailed
+        case mixerTapsOffNote, mixerSection, mixerEnableTaps, mixerTapsNote
+
+        // File shelf
+        case tabShelf
+        case shelfEmptyTitle, shelfEmptyHint, shelfClear, shelfMissing
+        case shelfRemove, shelfReveal, shelfCountOne, shelfCountMany
+        case shelfSection, shelfEnable, shelfNote
 
         // CLI messages a user can actually trigger
         case cliHooksInstalled, cliInstallFailed, cliHooksRemoved, cliUninstallFailed
@@ -104,6 +166,11 @@ enum L10n {
     /// Turkish writes the percent sign before the number ("%15"), English after ("15%").
     static func percent(_ value: Int, _ language: Localization.Language) -> String {
         language == .tr ? "%\(value)" : "\(value)%"
+    }
+
+    /// "12.4k" / "12,4k": token counts short enough for a badge.
+    static func compact(_ n: Int, _ language: Localization.Language) -> String {
+        CompactNumber.format(n, decimalComma: language == .tr)
     }
 
     /// Turkish uses a comma as the decimal separator.
@@ -199,13 +266,10 @@ enum L10n {
         .sounds: "Sesler",
         .notifications: "Bildirimler",
         .autoCollapse: "Kendiliğinden kapan",
-        .hooks: "Hook'lar",
         .remove: "Kaldır",
         .install: "Kur",
-        .allSettings: "Tüm ayarlar…",
         .quitApp: "Claude Notch'tan çık",
 
-        .tabGeneral: "Genel",
         .tabAbout: "Hakkında",
         .sectionStartup: "Başlangıç",
         .launchAtLogin: "Açılışta beni başlat",
@@ -239,16 +303,127 @@ enum L10n {
         .signedBy: "%@ · imzalayan: %@",
         .signedByNobody: "kimse",
 
-        .openNotch: "Çentiği aç",
-        .hooksInstalledMenu: "Hook'lar: kurulu",
-        .hooksNotInstalledMenu: "Hook'lar: kurulu değil",
-        .settingsMenu: "Ayarlar…",
-        .workingCountOne: "1 oturum çalışıyor",
-        .workingCountMany: "%d oturum çalışıyor",
 
         .notifPermissionNeeded: "İznin gerekiyor — %@",
         .notifTaskCompleted: "Görevin tamamlandı",
         .notifTaskFailed: "İşin hatayla bitti",
+
+        .tabSessions: "Oturumlar",
+        .tabMusic: "Müzik",
+        .musicNothingPlaying: "Şu an bir şey çalmıyor",
+        .musicLyricsLoading: "Sözler aranıyor…",
+        .musicNoLyrics: "Bu parçanın sözü bulunamadı",
+        .musicInstrumental: "Enstrümantal",
+        .musicSection: "Müzik",
+        .musicEnable: "Spotify'ı çentikte göster",
+        .musicShowLyrics: "Şarkı sözlerini göster",
+        .musicShowInPill: "Kapalı çentikte parçayı göster",
+        .musicNote: "Spotify açıkken çentikte bir Müzik sekmesi belirir. Sözler lrclib.net'ten geliyor; popüler parçaların çoğunda var, daha niş olanlarda olmayabilir.",
+
+        .musicVolume: "Ses",
+        .musicShuffle: "Karıştır",
+        .musicRepeat: "Tekrarla",
+        .musicOpenInSpotify: "Spotify'da aç",
+        .musicCopied: "Kopyalandı",
+
+        .spotifyAccountSection: "Spotify hesabı",
+        .spotifyClientID: "Client ID",
+        .spotifyConnect: "Bağlan",
+        .spotifyDisconnect: "Bağlantıyı kes",
+        .spotifyConnecting: "Bağlanılıyor…",
+        .spotifyConnected: "Bağlı",
+        .spotifySignedOut: "Bağlı değil",
+        .spotifyNeedsSetup: "Client ID gerekli",
+        .spotifyExpired: "Oturum süresi doldu",
+        .spotifyAccountNote: "Arama ve kuyruk için Spotify hesabı gerekiyor. developer.spotify.com'da ücretsiz bir uygulama oluştur, yönlendirme adresi olarak claudenotch://spotify-login-callback ekle ve Client ID'yi buraya yapıştır. Gizli anahtar istenmiyor; uygulama yalnızca kuyruğu ve son çalınanları okuma izni alıyor.",
+        .musicSearchPlaceholder: "Şarkı ara…",
+        .musicNoResults: "Sonuç yok",
+        .musicSearching: "Aranıyor…",
+        .tabLyrics: "Sözler",
+        .tabQueue: "Kuyruk",
+        .queuePrevious: "Önceki",
+        .queueNow: "Şu an",
+        .queueNext: "Sıradaki",
+        .queueEmpty: "Kuyrukta parça yok",
+        .queueSignInNeeded: "Ayarlar'dan Spotify hesabını bağla",
+
+        .layoutSection: "Yerleşim",
+        .layoutNotch: "Çentik",
+        .layoutEdge: "Kenar",
+        .layoutNote: "Çentik, panel ekranın üstünden sarkar. Kenar, sağ kenara yapışık dikey bir dock koyar; halkalara basınca detay baloncuğu açılır. Aynı anda yalnız biri çalışır.",
+        .edgeRingsSection: "Kenar halkaları",
+        .edgeRingSessions: "Oturumlar",
+        .edgeRingsNote: "Dock'ta hangi halkaların görüneceğini seç. Sırayı uygulama belirler; planında olmayan bir pencere (Opus gibi) hiç gösterilmez.",
+        .edgeOpenPanel: "Paneli aç",
+        .edgeUsed: "kullanıldı",
+        .edgeResetsIn: "%@ sonra sıfırlanır",
+        .edgeSessionsIdle: "Çalışan oturum yok",
+        .edgeSessionsWorkingOne: "1 oturum çalışıyor",
+        .edgeSessionsWorkingMany: "%d oturum çalışıyor",
+
+        .tabSettings: "Ayarlar",
+        .geminiSessionsToggle: "Gemini oturumları",
+        .notifGeminiQuestion: "Gemini bir soru soruyor",
+        .delegatedBadge: "Claude'dan",
+        .delegatedHelp: "Claude bu işi gemini-mcp ile Gemini'ye verdi",
+        .screenLabel: "Ekran",
+        .screenAutomatic: "Otomatik",
+        .screenPointer: "İmlecin olduğu ekran",
+        .eventAnimationsToggle: "Olay animasyonları",
+        .dailyTitle: "Bugün",
+        .dailyTurnsOne: "1 tur",
+        .dailyTurnsMany: "%d tur",
+        .dailyFailedOne: "1 hata",
+        .dailyFailedMany: "%d hata",
+        .usageAlertTitle: "%@ kullanımı %@",
+        .usageAlertBody: "%@ sonra sıfırlanır.",
+        .usageResetTitle: "%@ penceresi sıfırlandı",
+        .usageResetBody: "Kullanım baştan başladı.",
+        .usageAlertsToggle: "Kullanım uyarıları",
+        .hooksOutdated: "Yeni olaylar eklendi, hook'ları güncelle",
+        .hooksUpdate: "Güncelle",
+        .tokensShort: "%@ tok",
+        .tokenDetail: "giriş %@ · çıkış %@ · önbellek %@",
+        .usageToday: "Bugün %@",
+        .usageThisWeek: "Hafta %@",
+        .subagentOne: "1 ajan",
+        .subagentMany: "%d ajan",
+        .subagentsTitle: "Alt ajanlar",
+        .activityCompacting: "sıkıştırılıyor",
+        .rulesSection: "İzin kuralları",
+        .rulesEmpty: "Kayıtlı kural yok. Bir izin isteğinde \"Her zaman izin ver\"e basınca burada görünür.",
+        .rulesAllUses: "tüm kullanımlar",
+        .rulesLegacy: "geniş",
+        .rulesLegacyHint: "Eski kural: bu kelimeyle başlayan her komuta izin verir.",
+        .rulesClearAll: "Hepsini sil",
+        .rulesRemove: "Kuralı sil",
+        .tabMixer: "Ses",
+        .mixerOutput: "Çıkış",
+        .mixerInput: "Mikrofon",
+        .mixerApps: "Uygulamalar",
+        .mixerNoApps: "Şu an ses çalan uygulama yok",
+        .mixerAppsNote: "Sesi kısılan uygulama kaynağında susturulup buradan çalınır. Sürgüyü sonuna alman sesi olduğu gibi geçirir; bu yol, uygulama susana kadar açık kalır.",
+        .mixerAppFailed: "Soluk görünen uygulamanın sesi alınamadı",
+        .mixerTapsOffNote: "Burada yalnızca kendi ses ayarı olan uygulamalar var. Safari, Chrome gibi uygulamalar için Ayarlar'dan uygulama sesini aç.",
+        .mixerSection: "Ses karıştırıcı",
+        .mixerEnableTaps: "Uygulama başına ses (deneysel)",
+        .mixerTapsNote: "Açıkken, sesini kıstığın uygulama kaynağında susturulur ve sesi Claude Notch üzerinden çalınır — macOS'un uygulama başına ses için verdiği tek yol bu. Sürgüyü sonuna alırsan araya hiç girilmez. Kendi ses ayarı olan uygulamalar (Spotify, Music) bundan etkilenmez.",
+        .mixerNoVolumeControl: "Bu aygıtın sesi buradan ayarlanamıyor",
+        .mixerNoDevice: "Aygıt yok",
+        .mixerMute: "Sustur",
+
+        .tabShelf: "Raf",
+        .shelfEmptyTitle: "Raf boş",
+        .shelfEmptyHint: "Dosyaları çentiğe sürükle",
+        .shelfClear: "Tümünü temizle",
+        .shelfMissing: "bulunamadı",
+        .shelfRemove: "Raftan çıkar",
+        .shelfReveal: "Finder'da göster",
+        .shelfCountOne: "1 dosya",
+        .shelfCountMany: "%d dosya",
+        .shelfSection: "Dosya rafı",
+        .shelfEnable: "Dosya rafını göster",
+        .shelfNote: "Finder'dan çentiğe sürüklediğin dosyalar rafta bekler; oradan tekrar sürükleyip başka yere bırakabilirsin. Dosyalar kopyalanmaz, yalnızca yerleri tutulur.",
 
         .cliHooksInstalled: "Claude Notch hook'ları kuruldu.",
         .cliInstallFailed: "Kurulum başarısız: %@",
@@ -340,13 +515,10 @@ enum L10n {
         .sounds: "Sounds",
         .notifications: "Notifications",
         .autoCollapse: "Auto-collapse",
-        .hooks: "Hooks",
         .remove: "Remove",
         .install: "Install",
-        .allSettings: "All Settings…",
         .quitApp: "Quit Claude Notch",
 
-        .tabGeneral: "General",
         .tabAbout: "About",
         .sectionStartup: "Startup",
         .launchAtLogin: "Launch at login",
@@ -380,16 +552,127 @@ enum L10n {
         .signedBy: "%@ · signed by %@",
         .signedByNobody: "nobody",
 
-        .openNotch: "Open Notch",
-        .hooksInstalledMenu: "Hooks: installed",
-        .hooksNotInstalledMenu: "Hooks: not installed",
-        .settingsMenu: "Settings…",
-        .workingCountOne: "1 session working",
-        .workingCountMany: "%d sessions working",
 
         .notifPermissionNeeded: "Permission needed — %@",
         .notifTaskCompleted: "Task completed",
         .notifTaskFailed: "Task ended with an error",
+
+        .tabSessions: "Sessions",
+        .tabMusic: "Music",
+        .musicNothingPlaying: "Nothing playing",
+        .musicLyricsLoading: "Looking for lyrics…",
+        .musicNoLyrics: "No lyrics found for this track",
+        .musicInstrumental: "Instrumental",
+        .musicSection: "Music",
+        .musicEnable: "Show Spotify in the notch",
+        .musicShowLyrics: "Show lyrics",
+        .musicShowInPill: "Show the track in the closed notch",
+        .musicNote: "A Music tab appears while Spotify is running. Lyrics come from lrclib.net — most popular tracks are there, more obscure ones may not be.",
+
+        .musicVolume: "Volume",
+        .musicShuffle: "Shuffle",
+        .musicRepeat: "Repeat",
+        .musicOpenInSpotify: "Open in Spotify",
+        .musicCopied: "Copied",
+
+        .spotifyAccountSection: "Spotify account",
+        .spotifyClientID: "Client ID",
+        .spotifyConnect: "Connect",
+        .spotifyDisconnect: "Disconnect",
+        .spotifyConnecting: "Connecting…",
+        .spotifyConnected: "Connected",
+        .spotifySignedOut: "Not connected",
+        .spotifyNeedsSetup: "Client ID required",
+        .spotifyExpired: "Session expired",
+        .spotifyAccountNote: "Search and the queue need a Spotify account. Create a free app at developer.spotify.com, add claudenotch://spotify-login-callback as a redirect URI, and paste the Client ID here. No client secret is involved; the app only asks to read your queue and recently played tracks.",
+        .musicSearchPlaceholder: "Search tracks…",
+        .musicNoResults: "No results",
+        .musicSearching: "Searching…",
+        .tabLyrics: "Lyrics",
+        .tabQueue: "Queue",
+        .queuePrevious: "Previous",
+        .queueNow: "Now",
+        .queueNext: "Up next",
+        .queueEmpty: "Nothing queued",
+        .queueSignInNeeded: "Connect your Spotify account in Settings",
+
+        .layoutSection: "Layout",
+        .layoutNotch: "Notch",
+        .layoutEdge: "Edge",
+        .layoutNote: "Notch hangs the panel from the top of the screen. Edge puts a vertical dock against the right-hand side; tapping a ring opens a detail bubble. Only one is active at a time.",
+        .edgeRingsSection: "Edge rings",
+        .edgeRingSessions: "Sessions",
+        .edgeRingsNote: "Choose which rings appear in the dock. The app fixes their order, and a window your plan doesn't have (Opus, say) is never shown.",
+        .edgeOpenPanel: "Open panel",
+        .edgeUsed: "used",
+        .edgeResetsIn: "Resets in %@",
+        .edgeSessionsIdle: "Nothing working",
+        .edgeSessionsWorkingOne: "1 session working",
+        .edgeSessionsWorkingMany: "%d sessions working",
+
+        .tabSettings: "Settings",
+        .geminiSessionsToggle: "Gemini sessions",
+        .notifGeminiQuestion: "Gemini has a question",
+        .delegatedBadge: "from Claude",
+        .delegatedHelp: "Claude handed this to Gemini through gemini-mcp",
+        .screenLabel: "Display",
+        .screenAutomatic: "Automatic",
+        .screenPointer: "Follow the pointer",
+        .eventAnimationsToggle: "Event animations",
+        .dailyTitle: "Today",
+        .dailyTurnsOne: "1 turn",
+        .dailyTurnsMany: "%d turns",
+        .dailyFailedOne: "1 failed",
+        .dailyFailedMany: "%d failed",
+        .usageAlertTitle: "%@ usage at %@",
+        .usageAlertBody: "Resets in %@.",
+        .usageResetTitle: "%@ window has reset",
+        .usageResetBody: "Usage starts over.",
+        .usageAlertsToggle: "Usage alerts",
+        .hooksOutdated: "New events available — update the hooks",
+        .hooksUpdate: "Update",
+        .tokensShort: "%@ tok",
+        .tokenDetail: "in %@ · out %@ · cache %@",
+        .usageToday: "Today %@",
+        .usageThisWeek: "Week %@",
+        .subagentOne: "1 agent",
+        .subagentMany: "%d agents",
+        .subagentsTitle: "Subagents",
+        .activityCompacting: "compacting",
+        .rulesSection: "Permission rules",
+        .rulesEmpty: "No saved rules. Choosing \"Always Allow\" on a request adds one here.",
+        .rulesAllUses: "every use",
+        .rulesLegacy: "broad",
+        .rulesLegacyHint: "Older rule: allows every command starting with this word.",
+        .rulesClearAll: "Clear all",
+        .rulesRemove: "Remove rule",
+        .tabMixer: "Sound",
+        .mixerOutput: "Output",
+        .mixerInput: "Microphone",
+        .mixerApps: "Apps",
+        .mixerNoApps: "Nothing is playing right now",
+        .mixerAppsNote: "An app you turn down is muted at the source and replayed here. Full volume passes it through untouched; the route stays up until the app stops playing.",
+        .mixerAppFailed: "The dimmed app's audio couldn't be captured",
+        .mixerTapsOffNote: "Only apps with a volume of their own are listed. Turn on per-app volume in Settings to control Safari, Chrome and the rest.",
+        .mixerSection: "Sound mixer",
+        .mixerEnableTaps: "Per-app volume (experimental)",
+        .mixerTapsNote: "When on, an app you turn down is muted at the source and its audio is played back through Claude Notch — the only route macOS offers for per-app volume. At full volume nothing is intercepted. Apps with their own volume (Spotify, Music) are unaffected.",
+        .mixerNoVolumeControl: "This device's volume can't be set from here",
+        .mixerNoDevice: "No device",
+        .mixerMute: "Mute",
+
+        .tabShelf: "Shelf",
+        .shelfEmptyTitle: "The shelf is empty",
+        .shelfEmptyHint: "Drag files onto the notch",
+        .shelfClear: "Clear all",
+        .shelfMissing: "missing",
+        .shelfRemove: "Remove from shelf",
+        .shelfReveal: "Reveal in Finder",
+        .shelfCountOne: "1 file",
+        .shelfCountMany: "%d files",
+        .shelfSection: "File shelf",
+        .shelfEnable: "Show the file shelf",
+        .shelfNote: "Files dragged from Finder onto the notch wait here, and can be dragged back out to anywhere else. Nothing is copied — the shelf only remembers where each file lives.",
 
         .cliHooksInstalled: "Claude Notch hooks installed.",
         .cliInstallFailed: "Install failed: %@",

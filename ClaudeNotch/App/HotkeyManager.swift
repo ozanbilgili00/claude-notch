@@ -13,6 +13,11 @@ final class HotkeyManager {
     /// ⌥1 / ⌥2 / ⌥3 — answer a pending question. Registered only while one is up,
     /// so the keys stay free the rest of the time.
     static func questionID(index: Int) -> UInt32 { UInt32(100 + index) }
+    /// ⌥Y / ⌥⇧Y / ⌥N — allow once / always allow / deny a pending permission.
+    /// Registered only while a request is waiting.
+    static let allowOnceID: UInt32 = 200
+    static let alwaysAllowID: UInt32 = 201
+    static let denyID: UInt32 = 202
 
     private var hotKeys: [UInt32: EventHotKeyRef] = [:]
     private var eventHandler: EventHandlerRef?

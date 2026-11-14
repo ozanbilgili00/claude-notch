@@ -17,7 +17,7 @@ final class TranscriptWatcher: @unchecked Sendable {
     private var pending = Data()
 
     // Accumulated state (serial-queue confined).
-    private var runningTokens = 0
+    private var tally = TokenTally()
     private var logTail: [String] = []
     /// The conversation, built as lines arrive. Because this watcher already tails the
     /// file with an offset, the focused view gets its turns for free instead of
@@ -81,7 +81,7 @@ final class TranscriptWatcher: @unchecked Sendable {
         var task: String?
         var aiTitle: String?
         var lastPrompt: String?
-        var tokensAdded = 0
+        var tokensChanged = false
 
         let newline = UInt8(0x0A)
         while let idx = pending.firstIndex(of: newline) {
@@ -95,21 +95,23 @@ final class TranscriptWatcher: @unchecked Sendable {
             if let p = e.lastPrompt { lastPrompt = p }
             if let p = e.userPromptFull { append(.user, p) }
             if let t = e.assistantText { append(.assistant, t) }
-            tokensAdded += e.addedTokens
+            if let usage = e.usage {
+                tally.record(id: e.messageID, usage)
+                tokensChanged = true
+            }
             if let log = e.logLine {
                 logTail.append(log)
                 if logTail.count > 100 { logTail.removeFirst(logTail.count - 100) }
             }
         }
 
-        runningTokens += tokensAdded
-        let tokens = runningTokens
+        let tokens = tally.total
         let tail = logTail
         let conversation = turns
         let sid = sessionID
 
         guard model != nil || branch != nil || task != nil || aiTitle != nil
-                || lastPrompt != nil || tokensAdded > 0 || !tail.isEmpty
+                || lastPrompt != nil || tokensChanged || !tail.isEmpty
                 || !conversation.isEmpty else { return }
 
         Task { @MainActor [weak store] in
@@ -124,7 +126,7 @@ final class TranscriptWatcher: @unchecked Sendable {
                 } else if let task, s.task.isEmpty {
                     s.task = task
                 }
-                s.sessionTokens = tokens
+                s.tokens = tokens
                 s.logTail = tail
                 s.conversation = conversation
             }

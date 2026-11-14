@@ -32,7 +32,9 @@ final class HookServer: @unchecked Sendable {
         let bound = withUnsafePointer(to: &addr) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, len) }
         }
-        guard bound == 0, listen(fd, 32) == 0 else { close(fd); return false }
+        guard bound == 0 else { close(fd); return false }
+        chmod(path, 0o600)  // only the owning user may connect
+        guard listen(fd, 32) == 0 else { close(fd); return false }
 
         listenFD = fd
         queue.async { [weak self] in self?.acceptLoop(fd) }

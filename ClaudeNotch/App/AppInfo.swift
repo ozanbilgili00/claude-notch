@@ -15,6 +15,12 @@ enum AppInfo {
         Bundle.main.bundlePath
     }
 
+    /// Sent on every outbound HTTP request. LRCLIB asks clients to identify themselves and
+    /// Spotify logs it; one definition so the two can't drift.
+    static var userAgent: String {
+        "ClaudeNotch/\(version) (https://github.com/ozanbilgili00/claude-notch)"
+    }
+
     static var version: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"

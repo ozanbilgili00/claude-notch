@@ -2,7 +2,11 @@ import Foundation
 
 /// One Claude Code session being observed. Value type; the store owns the array.
 struct Session: Identifiable, Equatable {
-    let id: String                 // Claude Code session_id
+    let id: String                 // Claude Code session_id, or agy conversation id
+    /// Which CLI runs this session.
+    var agent: Agent = .claude
+    /// For Gemini: the gemini-mcp job id when Claude handed this work over.
+    var delegatedJob: String?
     var projectName: String        // last path component of cwd
     var cwd: String
     var title: String?             // Claude Code's own session title (transcript `ai-title`)
@@ -17,15 +21,24 @@ struct Session: Identifiable, Equatable {
     var startedAt: Date
     var lastActivityAt: Date
 
+    // Lines added / removed (the names predate that meaning): for the whole session,
+    // and for the current turn, which is what the completion card reports.
     var filesAdded: Int
     var filesRemoved: Int
-    var sessionTokens: Int
+    var turnAdded = 0
+    var turnRemoved = 0
+    var tokens: TokenCounts
 
     var transcriptPath: String?
     var pid: Int32?                // claude CLI process id (from discovery)
     var tty: String?              // controlling terminal, e.g. "/dev/ttys003"
     var logTail: [String]          // recent log lines for preview
     var conversation: [ConversationTurn] = []   // recent turns, built by TranscriptWatcher
+
+    /// Subagents this session has running right now (SubagentStart → SubagentStop).
+    var subagents: [Subagent] = []
+    /// Between PreCompact and PostCompact: the conversation is being summarised.
+    var compacting = false
 
     var pendingPermission: PermissionRequest?
     var pendingQuestion: Question?
@@ -50,20 +63,26 @@ struct Session: Identifiable, Equatable {
         return "\(path) · \(name)"
     }
 
-    /// Pretty model name for badges ("claude-fable-5" -> "Fable 5").
+    /// Pretty model name for badges ("claude-opus-5-5" -> "Opus 5.5"). Empty until the
+    /// transcript has said which model is running.
     var modelDisplay: String { Session.prettyModel(model) }
 
+    /// Rule-based rather than a lookup table, so a model released after this build
+    /// still reads properly: drop the vendor prefix and any 8-digit date stamp,
+    /// capitalise the family, and join the version numbers with dots.
     static func prettyModel(_ raw: String) -> String {
-        let map: [String: String] = [
-            "claude-opus-4-8": "Opus 4.8",
-            "claude-fable-5": "Fable 5",
-            "claude-sonnet-5": "Sonnet 5",
-            "claude-haiku-4-5-20251001": "Haiku 4.5",
-        ]
-        if let m = map[raw] { return m }
-        // Generic cleanup: drop vendor prefix, title-case.
-        let stripped = raw.replacingOccurrences(of: "claude-", with: "")
-        return stripped.split(separator: "-").map { $0.capitalized }.joined(separator: " ")
+        // Gemini's CLI already writes a readable name ("Gemini 4 Argon (Low)").
+        if raw.contains(" ") { return raw }
+        var parts = raw.lowercased().split(separator: "-").map(String.init)
+        if parts.first == "claude" { parts.removeFirst() }
+        if let last = parts.last, last.count == 8, last.allSatisfy(\.isNumber) { parts.removeLast() }
+        guard !parts.isEmpty else { return "" }
+        let words = parts.prefix { !$0.allSatisfy(\.isNumber) }.map { $0.capitalized }
+        let numbers = parts.drop { !$0.allSatisfy(\.isNumber) }
+        let version = numbers.prefix { $0.allSatisfy(\.isNumber) }.joined(separator: ".")
+        // Words after the version are kept: "gemini-3.8-flash-high" → "Gemini 3.8 Flash High".
+        let tail = numbers.drop { $0.allSatisfy(\.isNumber) }.map { $0.capitalized }
+        return (words + (version.isEmpty ? [] : [version]) + tail).joined(separator: " ")
     }
 
     static func empty(id: String, cwd: String) -> Session {
@@ -71,13 +90,26 @@ struct Session: Identifiable, Equatable {
         return Session(
             id: id, projectName: name.isEmpty ? "session" : name, cwd: cwd, title: nil,
             task: "", status: .idle, activity: .idle, activityDetail: "",
-            currentTool: nil, model: "claude-opus-4-8", terminalApp: nil, branch: nil,
+            currentTool: nil, model: "", terminalApp: nil, branch: nil,
             startedAt: Date(), lastActivityAt: Date(),
-            filesAdded: 0, filesRemoved: 0, sessionTokens: 0,
+            filesAdded: 0, filesRemoved: 0, tokens: TokenCounts(),
             transcriptPath: nil, pid: nil, tty: nil, logTail: [], pendingPermission: nil,
             pendingQuestion: nil, completion: nil, timeline: []
         )
     }
+}
+
+/// The coding agent behind a session.
+enum Agent: String, Equatable {
+    case claude      // Claude Code
+    case gemini      // Antigravity CLI (`agy`)
+}
+
+/// A subagent started by a session (Task / Agent tool).
+struct Subagent: Identifiable, Equatable {
+    let id: String          // Claude Code's agent_id
+    var type: String        // agent_type, e.g. "Explore"; may be empty
+    var startedAt: Date
 }
 
 /// Summary shown on the "Task Completed" screen.

@@ -8,6 +8,7 @@ struct FocusedSessionView: View {
     let session: Session
     var onDone: () -> Void
     var onBack: () -> Void
+    var morph: Namespace.ID? = nil
 
     enum Tab { case conversation, log }
     @State private var tab: Tab = .conversation
@@ -46,25 +47,40 @@ struct FocusedSessionView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 10) {
-            PixelCreature(art: .claude,
+            PixelCreature(art: session.creatureArt,
                           tint: session.status.creatureTint,
                           height: 22,
-                          motion: .forStatus(session.status, activity: session.activity))
+                          motion: .forStatus(session.status, activity: session.activity),
+                          pace: PixelCreature.pace(for: session.activity, working: 1),
+                          event: store.event(for: session.id),
+                          activity: session.activity)
+                .morphing("critter-\(session.id)", in: morph)
                 .frame(width: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.displayName).font(Theme.title).lineLimit(1)
+                    .morphing("title-\(session.id)", in: morph)
                 HStack(spacing: 6) {
                     Text(session.locationLine)
                         .font(Theme.micro).foregroundStyle(Theme.dim).lineLimit(1)
                     // System-driven, so it keeps counting without anything redrawing.
                     Text(session.startedAt, style: .timer)
                         .font(Theme.micro).foregroundStyle(Theme.dim).monospacedDigit()
+                    if session.tokens.main > 0 {
+                        Text(L(.tokensShort, Lcompact(session.tokens.main)))
+                            .font(Theme.micro).foregroundStyle(Theme.dim)
+                            .contentTransition(.numericText(value: Double(session.tokens.main)))
+                            .animation(Theme.Motion.value, value: session.tokens.main)
+                            .help(L(.tokenDetail, Lcompact(session.tokens.input),
+                                    Lcompact(session.tokens.output), Lcompact(session.tokens.cache)))
+                    }
                 }
             }
             Spacer(minLength: 8)
             HStack(spacing: 4) {
-                Badge(text: "Claude", tint: Color.forToken("claude"))
-                Badge(text: session.modelDisplay, tint: Theme.textDim)
+                AgentBadges(session: session)
+                if !session.modelDisplay.isEmpty {
+                    Badge(text: session.modelDisplay, tint: Theme.textDim)
+                }
             }
             Button(L(.done), action: onDone)
                 .buttonStyle(.plain)
@@ -80,6 +96,10 @@ struct FocusedSessionView: View {
         VStack(spacing: 8) {
             tabBar
             lastPromptStrip
+            if !session.subagents.isEmpty || session.compacting {
+                agentStrip
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             Group {
                 if tab == .conversation {
                     ConversationView(turns: session.conversation, status: session.status)
@@ -146,6 +166,39 @@ struct FocusedSessionView: View {
     }
 
     /// Prefer the full text from the transcript; fall back to the session's short task.
+    /// Running subagents, each with its own live timer, plus a compaction notice. Only
+    /// present while there is something to say.
+    private var agentStrip: some View {
+        HStack(spacing: 6) {
+            if session.compacting {
+                Label(ActivityKind.compacting.verb, systemImage: ActivityKind.compacting.sfSymbol)
+                    .font(Theme.micro).foregroundStyle(Theme.amber)
+            }
+            if !session.subagents.isEmpty {
+                Text(L(.subagentsTitle)).font(Theme.micro).foregroundStyle(Theme.dim)
+            }
+            ScrollView(.horizontal) {
+                HStack(spacing: 6) {
+                    ForEach(session.subagents) { agent in
+                        HStack(spacing: 4) {
+                            WorkingBars(color: Theme.violet)
+                            Text(agent.type.isEmpty ? "agent" : agent.type)
+                                .foregroundStyle(Theme.textDim)
+                            Text(agent.startedAt, style: .timer)
+                                .foregroundStyle(Theme.dim).monospacedDigit()
+                        }
+                        .font(Theme.micro)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(Capsule().fill(Theme.violet.opacity(0.12)))
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+        .animation(Theme.Motion.quick, value: session.subagents.map(\.id))
+    }
+
     private var lastUserPrompt: String? {
         if let turn = session.conversation.last(where: { $0.role == .user }) { return turn.text }
         return session.task.isEmpty ? nil : session.task

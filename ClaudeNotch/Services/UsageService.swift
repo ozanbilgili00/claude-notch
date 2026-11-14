@@ -39,6 +39,7 @@ final class UsageService: @unchecked Sendable {
             }
             if dbg { fputs("[usage] 5h=\(snapshot.fiveHour) 7d=\(snapshot.sevenDay)\n", stderr) }
             await MainActor.run {
+                let previous = self.store.usage.isLive ? self.store.usage : nil
                 self.store.usage.fiveHourPercent = snapshot.fiveHour
                 self.store.usage.fiveHourResetsAt = snapshot.fiveHourResets
                 self.store.usage.weeklyPercent = snapshot.sevenDay
@@ -49,7 +50,26 @@ final class UsageService: @unchecked Sendable {
                 self.store.usage.extraCreditsLimit = snapshot.extraLimit
                 self.store.usage.severity = snapshot.severity
                 self.store.usage.isLive = true
+                self.checkAlerts(previous: previous)
             }
+        }
+    }
+
+    // MARK: Alerts
+
+    private static let firedKey = "usageAlertsFired"
+
+    @MainActor private func checkAlerts(previous: UsageSnapshot?) {
+        let defaults = UserDefaults.standard
+        let fired = Set(defaults.stringArray(forKey: Self.firedKey) ?? [])
+        let result = UsageAlerts.evaluate(previous: previous, current: store.usage, fired: fired)
+        defaults.set(Array(result.fired), forKey: Self.firedKey)
+        // First fetch after launch: remember what is already over a threshold without
+        // announcing it — the user saw that number before quitting.
+        guard previous != nil, defaults.usageAlertsEnabled else { return }
+        for alert in result.alerts { NotificationService.notifyUsage(alert) }
+        if let last = result.alerts.last {
+            store.signal(last.kind == .reset ? .usageReset : .usageWarning)
         }
     }
 
